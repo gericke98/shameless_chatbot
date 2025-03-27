@@ -11,19 +11,6 @@ const ratelimit = new Ratelimit({
 });
 
 export async function middleware(request: NextRequest) {
-  // Handle preflight requests
-  if (request.method === "OPTIONS") {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "https://shamelesscollective.com",
-        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
-        "Access-Control-Max-Age": "86400", // 24 hours
-      },
-    });
-  }
-
   const ip = request.ip ?? "127.0.0.1";
   const { success, limit, reset, remaining } = await ratelimit.limit(ip);
 
@@ -39,21 +26,6 @@ export async function middleware(request: NextRequest) {
   }
 
   const response = NextResponse.next();
-
-  // Add CORS headers
-  response.headers.set(
-    "Access-Control-Allow-Origin",
-    "https://shamelesscollective.com"
-  );
-  response.headers.set(
-    "Access-Control-Allow-Methods",
-    "GET, POST, PUT, DELETE, OPTIONS"
-  );
-  response.headers.set(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, Accept"
-  );
-  response.headers.set("Access-Control-Max-Age", "86400"); // 24 hours
 
   // Add security headers
   response.headers.set("X-DNS-Prefetch-Control", "on");
