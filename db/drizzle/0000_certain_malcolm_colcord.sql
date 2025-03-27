@@ -8,11 +8,13 @@ CREATE TABLE "messages" (
 --> statement-breakpoint
 CREATE TABLE "tickets" (
 	"id" text PRIMARY KEY NOT NULL,
-	"order_number" text NOT NULL,
-	"email" text NOT NULL,
+	"order_number" text,
+	"email" text,
+	"name" text,
 	"created_at" text NOT NULL,
 	"updated_at" text NOT NULL,
-	"status" text NOT NULL
+	"status" text NOT NULL,
+	"admin" boolean NOT NULL DEFAULT false
 );
 --> statement-breakpoint
 ALTER TABLE "messages" ADD CONSTRAINT "messages_ticket_id_tickets_id_fk" FOREIGN KEY ("ticket_id") REFERENCES "public"."tickets"("id") ON DELETE cascade ON UPDATE no action;

@@ -24,10 +24,16 @@ async function main() {
     // Log database connection info
     console.log("Database connection established");
 
-    // Create tables directly if they don't exist
+    // Drop existing tables if they exist
+    console.log("Dropping existing tables...");
+    await sql`DROP TABLE IF EXISTS "messages" CASCADE;`;
+    await sql`DROP TABLE IF EXISTS "tickets" CASCADE;`;
+    console.log("Existing tables dropped");
+
+    // Create tables
     console.log("Creating tickets table...");
     await sql`
-      CREATE TABLE IF NOT EXISTS "tickets" (
+      CREATE TABLE "tickets" (
         "id" text PRIMARY KEY NOT NULL,
         "order_number" text,
         "email" text,
@@ -42,7 +48,7 @@ async function main() {
 
     console.log("Creating messages table...");
     await sql`
-      CREATE TABLE IF NOT EXISTS "messages" (
+      CREATE TABLE "messages" (
         "id" serial PRIMARY KEY NOT NULL,
         "sender" text NOT NULL,
         "text" text NOT NULL,
