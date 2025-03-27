@@ -16,6 +16,9 @@
       return;
     }
 
+    // API base URL
+    const API_BASE_URL = "https://shameless-chatbot.vercel.app";
+
     // Create and inject styles
     const styles = `
             .chat-widget-container {
@@ -31,21 +34,59 @@
                 color: white;
                 border: none;
                 border-radius: 9999px;
-                padding: 16px 32px;
-                font-size: 16px;
-                font-weight: 600;
+                padding: 16px;
                 cursor: pointer;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
                 transition: all 0.2s ease-in-out;
+                position: relative;
+                width: 64px;
+                height: 64px;
                 display: flex;
                 align-items: center;
-                gap: 8px;
-                position: relative;
+                justify-content: center;
             }
 
             .chat-button:hover {
                 transform: translateY(-2px);
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            }
+
+            .chat-button::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(to right, rgba(59, 130, 246, 0.2), rgba(37, 99, 235, 0.2));
+                border-radius: 9999px;
+                animation: pulse 2s infinite;
+            }
+
+            @keyframes pulse {
+                0% { transform: scale(1); opacity: 1; }
+                50% { transform: scale(1.5); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+            }
+
+            .chat-button-inner {
+                width: 56px;
+                height: 56px;
+                background: white;
+                border-radius: 9999px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: transform 0.2s ease-in-out;
+                position: relative;
+                z-index: 1;
+            }
+
+            .chat-button:hover .chat-button-inner {
+                transform: scale(0.9);
+            }
+
+            .chat-button img {
+                width: 32px;
+                height: 32px;
+                object-fit: contain;
             }
 
             .chat-window {
@@ -81,12 +122,49 @@
                 backdrop-filter: blur(4px);
             }
 
-            .chat-header h2 {
-                margin: 0;
-                font-size: 18px;
-                font-weight: 600;
+            .chat-header-content {
+                display: flex;
+                align-items: center;
+                gap: 12px;
                 position: relative;
                 z-index: 1;
+            }
+
+            .chat-header-avatar {
+                width: 40px;
+                height: 40px;
+                border-radius: 9999px;
+                background: white;
+                padding: 2px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+
+            .chat-header-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+
+            .chat-header-info h2 {
+                margin: 0;
+                font-size: 16px;
+                font-weight: 600;
+            }
+
+            .chat-header-info .status {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                opacity: 0.9;
+            }
+
+            .status-dot {
+                width: 8px;
+                height: 8px;
+                background: #22c55e;
+                border-radius: 9999px;
+                animation: pulse 2s infinite;
             }
 
             .chat-messages {
@@ -101,37 +179,53 @@
             }
 
             .message {
+                display: flex;
+                align-items: flex-end;
+                gap: 8px;
                 max-width: 85%;
-                padding: 12px 16px;
-                border-radius: 12px;
-                font-size: 14px;
-                line-height: 1.5;
                 position: relative;
                 transition: all 0.2s ease-in-out;
             }
 
-            .message:hover {
-                transform: scale(1.01);
-            }
-
-            .message.bot {
-                background: white;
-                color: #1f2937;
-                align-self: flex-start;
-                border: 1px solid rgba(0, 0, 0, 0.05);
-                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-            }
-
             .message.user {
-                background: linear-gradient(to right, #3b82f6, #2563eb);
-                color: white;
                 align-self: flex-end;
-                box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+                flex-direction: row-reverse;
+            }
+
+            .message-avatar {
+                width: 24px;
+                height: 24px;
+                border-radius: 9999px;
+                overflow: hidden;
+                flex-shrink: 0;
+                background: white;
+                border: 1px solid rgba(0, 0, 0, 0.05);
+            }
+
+            .message-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+                padding: 2px;
             }
 
             .message-content {
-                white-space: pre-wrap;
-                word-break: break-word;
+                padding: 12px 16px;
+                border-radius: 12px;
+                font-size: 14px;
+                line-height: 1.5;
+                box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            }
+
+            .message.bot .message-content {
+                background: white;
+                color: #1f2937;
+                border: 1px solid rgba(0, 0, 0, 0.05);
+            }
+
+            .message.user .message-content {
+                background: linear-gradient(to right, #3b82f6, #2563eb);
+                color: white;
             }
 
             .message-time {
@@ -238,11 +332,18 @@
                 justify-content: center;
                 display: none;
                 box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+                animation: bounce 1s infinite;
+            }
+
+            @keyframes bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-4px); }
             }
 
             .loading-indicator {
                 display: flex;
-                gap: 4px;
+                align-items: flex-end;
+                gap: 8px;
                 padding: 12px 16px;
                 background: white;
                 border-radius: 12px;
@@ -261,11 +362,6 @@
 
             .loading-dot:nth-child(1) { animation-delay: -0.32s; }
             .loading-dot:nth-child(2) { animation-delay: -0.16s; }
-
-            @keyframes bounce {
-                0%, 80%, 100% { transform: scale(0); }
-                40% { transform: scale(1); }
-            }
 
             @media (max-width: 640px) {
                 .chat-window {
@@ -299,10 +395,9 @@
     const chatButton = document.createElement("button");
     chatButton.className = "chat-button";
     chatButton.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-            </svg>
-            Chat Now
+            <div class="chat-button-inner">
+                <img src="/logo.png" alt="Chat with us" />
+            </div>
             <div class="unread-badge"></div>
         `;
     chatContainer.appendChild(chatButton);
@@ -312,7 +407,18 @@
     chatWindow.className = "chat-window";
     chatWindow.innerHTML = `
             <div class="chat-header">
-                <h2>Shameless Support</h2>
+                <div class="chat-header-content">
+                    <div class="chat-header-avatar">
+                        <img src="/logo.png" alt="Shameless Collective" />
+                    </div>
+                    <div class="chat-header-info">
+                        <h2>Shameless Support</h2>
+                        <div class="status">
+                            <div class="status-dot"></div>
+                            <span>Online now</span>
+                        </div>
+                    </div>
+                </div>
                 <button class="close-button">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M18 6L6 18M6 6l12 12"></path>
@@ -353,8 +459,13 @@
       const messageDiv = document.createElement("div");
       messageDiv.className = `message ${message.sender}`;
       messageDiv.innerHTML = `
-        <div class="message-content">${message.text}</div>
-        <div class="message-time">${formatDate(message.timestamp)}</div>
+        <div class="message-avatar">
+            <img src="/logo.png" alt="${message.sender === "user" ? "You" : "Bot"}" />
+        </div>
+        <div class="message-content">
+            <div class="message-text">${message.text}</div>
+            <div class="message-time">${formatDate(message.timestamp)}</div>
+        </div>
       `;
       return messageDiv;
     }
@@ -363,9 +474,16 @@
       const loadingDiv = document.createElement("div");
       loadingDiv.className = "loading-indicator";
       loadingDiv.innerHTML = `
-        <div class="loading-dot"></div>
-        <div class="loading-dot"></div>
-        <div class="loading-dot"></div>
+        <div class="message-avatar">
+            <img src="/logo.png" alt="Bot" />
+        </div>
+        <div class="message-content">
+            <div class="flex gap-1">
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+                <div class="loading-dot"></div>
+            </div>
+        </div>
       `;
       return loadingDiv;
     }
@@ -385,11 +503,14 @@
     // API functions
     async function createTicket(message) {
       try {
-        const response = await fetch("/api/tickets", {
+        const response = await fetch(`${API_BASE_URL}/api/tickets`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
+          mode: "cors",
+          credentials: "omit",
           body: JSON.stringify({
             sender: message.sender,
             text: message.text,
@@ -399,7 +520,15 @@
           }),
         });
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error("Error creating ticket:", {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText,
+          });
+          throw new Error(
+            `HTTP error! status: ${response.status}\n${errorText}`
+          );
         }
         return await response.json();
       } catch (error) {
@@ -410,11 +539,14 @@
 
     async function addMessageToTicket(ticketId, message) {
       try {
-        const response = await fetch("/api/messages", {
+        const response = await fetch(`${API_BASE_URL}/api/messages`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
+          mode: "cors",
+          credentials: "omit",
           body: JSON.stringify({
             ticketId,
             message: {
@@ -426,7 +558,15 @@
           }),
         });
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error("Error adding message:", {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText,
+          });
+          throw new Error(
+            `HTTP error! status: ${response.status}\n${errorText}`
+          );
         }
         return await response.json();
       } catch (error) {
@@ -437,21 +577,33 @@
 
     async function getBotResponse(message) {
       try {
-        const response = await fetch("/api/chat", {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
+          mode: "cors",
+          credentials: "omit",
           body: JSON.stringify({
             message,
             context: messages.map((msg) => ({
               role: msg.sender === "user" ? "user" : "assistant",
               content: msg.text,
             })),
+            currentTicket,
           }),
         });
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          console.error("Error getting bot response:", {
+            status: response.status,
+            statusText: response.statusText,
+            body: errorText,
+          });
+          throw new Error(
+            `HTTP error! status: ${response.status}\n${errorText}`
+          );
         }
         return await response.json();
       } catch (error) {
