@@ -11,6 +11,19 @@ const ratelimit = new Ratelimit({
 });
 
 export async function middleware(request: NextRequest) {
+  // Handle preflight requests
+  if (request.method === "OPTIONS") {
+    return new NextResponse(null, {
+      status: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+        "Access-Control-Max-Age": "86400", // 24 hours
+      },
+    });
+  }
+
   const ip = request.ip ?? "127.0.0.1";
   const { success, limit, reset, remaining } = await ratelimit.limit(ip);
 
