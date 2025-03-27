@@ -143,11 +143,21 @@ export async function POST(req: NextRequest): Promise<Response> {
       (!currentTicket.orderNumber || !currentTicket.email)
     ) {
       if (!parameters.order_number || !parameters.email) {
-        return NextResponse.json<APIResponse>({
-          data: { response: await NoOrderNumberOrEmail(language) },
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+        return NextResponse.json<APIResponse>(
+          {
+            data: { response: await NoOrderNumberOrEmail(language) },
+            requestId,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            headers: {
+              "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers":
+                "Content-Type, Authorization, Accept",
+            },
+          }
+        );
       }
 
       const shopifyData = await trackOrder(
@@ -156,13 +166,23 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
 
       if (!shopifyData.success) {
-        return NextResponse.json<APIResponse>({
-          data: {
-            response: await InvalidCredentials(language, shopifyData.error),
+        return NextResponse.json<APIResponse>(
+          {
+            data: {
+              response: await InvalidCredentials(language, shopifyData.error),
+            },
+            requestId,
+            timestamp: new Date().toISOString(),
           },
-          requestId,
-          timestamp: new Date().toISOString(),
-        });
+          {
+            headers: {
+              "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+              "Access-Control-Allow-Headers":
+                "Content-Type, Authorization, Accept",
+            },
+          }
+        );
       }
 
       updatedTicket = await updateTicketWithOrderInfo(
@@ -247,11 +267,20 @@ export async function POST(req: NextRequest): Promise<Response> {
       ),
     ]);
 
-    return NextResponse.json<APIResponse>({
-      data: { response, updatedTicket },
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
+    return NextResponse.json<APIResponse>(
+      {
+        data: { response, updatedTicket },
+        requestId,
+        timestamp: new Date().toISOString(),
+      },
+      {
+        headers: {
+          "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+        },
+      }
+    );
   } catch (error) {
     return handleError(error, requestId);
   }
