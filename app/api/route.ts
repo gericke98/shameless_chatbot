@@ -27,6 +27,18 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+      "Access-Control-Max-Age": "86400", // 24 hours
+    },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const requestId = createRequestId();
 
