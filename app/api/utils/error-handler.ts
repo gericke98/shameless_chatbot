@@ -37,6 +37,12 @@ export function handleError(
         : error,
   });
 
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  };
+
   if (error instanceof APIError) {
     return NextResponse.json(
       {
@@ -47,7 +53,10 @@ export function handleError(
           requestId,
         },
       },
-      { status: error.statusCode }
+      {
+        status: error.statusCode,
+        headers: corsHeaders,
+      }
     );
   }
 
@@ -61,7 +70,10 @@ export function handleError(
         requestId,
       },
     },
-    { status: 500 }
+    {
+      status: 500,
+      headers: corsHeaders,
+    }
   );
 }
 
