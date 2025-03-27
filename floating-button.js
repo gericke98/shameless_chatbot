@@ -503,6 +503,7 @@
     // API functions
     async function createTicket(message) {
       try {
+        console.log("Creating ticket with message:", message);
         const response = await fetch(`${API_BASE_URL}/api/tickets`, {
           method: "POST",
           headers: {
@@ -519,6 +520,7 @@
             admin: false,
           }),
         });
+        console.log("Create ticket response status:", response.status);
         if (!response.ok) {
           const errorText = await response.text();
           console.error("Error creating ticket:", {
@@ -530,7 +532,9 @@
             `HTTP error! status: ${response.status}\n${errorText}`
           );
         }
-        return await response.json();
+        const data = await response.json();
+        console.log("Create ticket response data:", data);
+        return data;
       } catch (error) {
         console.error("Error creating ticket:", error);
         throw error;
@@ -539,6 +543,7 @@
 
     async function addMessageToTicket(ticketId, message) {
       try {
+        console.log("Adding message to ticket:", { ticketId, message });
         const response = await fetch(`${API_BASE_URL}/api/messages`, {
           method: "POST",
           headers: {
@@ -557,6 +562,7 @@
             },
           }),
         });
+        console.log("Add message response status:", response.status);
         if (!response.ok) {
           const errorText = await response.text();
           console.error("Error adding message:", {
@@ -568,7 +574,9 @@
             `HTTP error! status: ${response.status}\n${errorText}`
           );
         }
-        return await response.json();
+        const data = await response.json();
+        console.log("Add message response data:", data);
+        return data;
       } catch (error) {
         console.error("Error adding message:", error);
         throw error;
@@ -577,6 +585,7 @@
 
     async function getBotResponse(message) {
       try {
+        console.log("Getting bot response for message:", message);
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
           method: "POST",
           headers: {
@@ -594,6 +603,7 @@
             currentTicket,
           }),
         });
+        console.log("Get bot response status:", response.status);
         if (!response.ok) {
           const errorText = await response.text();
           console.error("Error getting bot response:", {
@@ -605,7 +615,9 @@
             `HTTP error! status: ${response.status}\n${errorText}`
           );
         }
-        return await response.json();
+        const data = await response.json();
+        console.log("Get bot response data:", data);
+        return data;
       } catch (error) {
         console.error("Error getting bot response:", error);
         throw error;
@@ -619,13 +631,15 @@
           isLoading = true;
           submitButton.disabled = true;
           try {
+            console.log("Initializing chat...");
             const initialMessage = {
               sender: "bot",
               text: "👋 Hi! I'm Santi from Shameless Collective. What can I help you with?",
               timestamp: new Date().toISOString(),
             };
             const ticket = await createTicket(initialMessage);
-            if (ticket.status === 200 && ticket.data) {
+            console.log("Ticket created:", ticket);
+            if (ticket && ticket.data) {
               currentTicket = ticket.data;
               messages = [initialMessage];
               messagesContainer.innerHTML = "";
@@ -633,6 +647,8 @@
                 messagesContainer.appendChild(createMessageElement(msg));
               });
               scrollToBottom();
+            } else {
+              throw new Error("Invalid ticket response");
             }
           } catch (error) {
             console.error("Error initializing chat:", error);
@@ -672,6 +688,7 @@
       const message = inputTextarea.value.trim();
       if (!message || !currentTicket || isLoading) return;
 
+      console.log("Sending message:", message);
       const userMessage = {
         sender: "user",
         text: message,
@@ -695,11 +712,14 @@
         scrollToBottom();
 
         // Save message to database
+        console.log("Adding message to ticket:", currentTicket.id);
         await addMessageToTicket(currentTicket.id, userMessage);
 
         // Get bot response
+        console.log("Getting bot response");
         const response = await getBotResponse(message);
-        if (response.data?.response) {
+        console.log("Bot response received:", response);
+        if (response && response.data && response.data.response) {
           const botMessage = {
             sender: "bot",
             text: response.data.response,
@@ -710,6 +730,8 @@
           messagesContainer.removeChild(loadingIndicator);
           messagesContainer.appendChild(createMessageElement(botMessage));
           scrollToBottom();
+        } else {
+          throw new Error("Invalid bot response");
         }
       } catch (error) {
         console.error("Error sending message:", error);
