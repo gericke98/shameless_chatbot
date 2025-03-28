@@ -39,20 +39,20 @@
                 color: white;
                 border: none;
                 border-radius: 9999px;
-                padding: 16px;
+                padding: 12px;
                 cursor: pointer;
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-                transition: all 0.2s ease-in-out;
+                transition: all 0.3s ease-in-out;
                 position: relative;
-                width: 64px;
-                height: 64px;
+                width: 80px;
+                height: 80px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
             }
 
             .chat-button:hover {
-                transform: translateY(-2px);
+                transform: scale(1.05);
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             }
 
@@ -74,14 +74,15 @@
             .chat-button-inner {
                 width: 56px;
                 height: 56px;
-                background: white;
+                background: rgba(255, 255, 255, 0.9);
                 border-radius: 9999px;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: transform 0.2s ease-in-out;
+                transition: transform 0.3s ease-in-out;
                 position: relative;
                 z-index: 1;
+                box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
             }
 
             .chat-button:hover .chat-button-inner {
@@ -89,9 +90,10 @@
             }
 
             .chat-button img {
-                width: 32px;
-                height: 32px;
+                width: 48px;
+                height: 48px;
                 object-fit: contain;
+                padding: 4px;
             }
 
             .chat-window {
@@ -401,7 +403,7 @@
     chatButton.className = "chat-button";
     chatButton.innerHTML = `
             <div class="chat-button-inner">
-                <img src="${LOGO_URL}" alt="Chat with us" width="32" height="32" style="object-fit: contain; padding: 4px;">
+                <img src="${LOGO_URL}" alt="Chat with us" width="48" height="48">
             </div>
             <div class="unread-badge"></div>
         `;
