@@ -14,9 +14,12 @@ const handler = NextAuth({
           return null;
         }
 
-        // Hardcoded credentials for demo purposes
-        const validEmail = "hello@shamelesscollective.com";
-        const validPassword = "Shameless1998-";
+        const validEmail = process.env.ADMIN_EMAIL;
+        const validPassword = process.env.ADMIN_PASSWORD;
+
+        if (!validEmail || !validPassword) {
+          throw new Error("Missing admin credentials in environment variables");
+        }
 
         if (
           credentials.email === validEmail &&
@@ -38,7 +41,7 @@ const handler = NextAuth({
   session: {
     strategy: "jwt",
   },
-  secret: process.env.NEXTAUTH_SECRET || "your-secret-key-here",
+  secret: process.env.NEXTAUTH_SECRET,
 });
 
 export { handler as GET, handler as POST };

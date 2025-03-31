@@ -150,8 +150,7 @@ Size recommendation guidelines:
   6. ALWAYS respond in the same language as the template`,
   };
 
-  private readonly RETURNS_PORTAL_URL =
-    "https://shameless-returns-web.vercel.app";
+  private RETURNS_PORTAL_URL: string;
   private readonly MODEL = process.env.OPENAI_MODEL || "gpt-4-turbo-preview";
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000;
@@ -159,12 +158,15 @@ Size recommendation guidelines:
   constructor() {
     const apiKey = process.env.OPENAI_API_KEY;
     const googleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
+    const returnsPortalUrl = process.env.RETURNS_PORTAL_URL;
 
     if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
     if (!googleMapsApiKey) throw new Error("GOOGLE_MAPS_API_KEY is not set");
+    if (!returnsPortalUrl) throw new Error("RETURNS_PORTAL_URL is not set");
 
     this.apiKey = apiKey;
     this.googleMapsApiKey = googleMapsApiKey;
+    this.RETURNS_PORTAL_URL = returnsPortalUrl;
 
     // Initialize active products
     this.initializeProducts();
