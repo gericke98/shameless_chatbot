@@ -8,13 +8,13 @@
   }
 
   function initializeChat() {
-    // Check if we're on the homepage
-    if (
-      window.location.pathname !== "/" &&
-      !window.location.pathname.endsWith("/index.html")
-    ) {
-      return;
-    }
+    // // Check if we're on the homepage
+    // if (
+    //   window.location.pathname !== "/" &&
+    //   !window.location.pathname.endsWith("/index.html")
+    // ) {
+    //   return;
+    // }
 
     // API base URL
     const API_BASE_URL = "https://shameless-chatbot.vercel.app";
@@ -874,7 +874,13 @@
       }
     });
 
-    submitButton.addEventListener("click", async () => {
+    submitButton.setAttribute("type", "button");
+
+    submitButton.addEventListener("click", async (e) => {
+      // Prevent default button behavior and stop event propagation
+      e.preventDefault();
+      e.stopPropagation();
+
       const message = inputTextarea.value.trim();
       if (!message || !currentTicket || isLoading) return;
 
@@ -934,6 +940,25 @@
       }
     });
 
+    // Update the keydown handler for the textarea
+    inputTextarea.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitButton.click();
+      }
+    });
+
+    // Add touchstart handler for the submit button
+    submitButton.addEventListener(
+      "touchstart",
+      (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        submitButton.click();
+      },
+      { passive: false }
+    );
+
     // Update the meta viewport tag
     const metaViewport = document.createElement("meta");
     metaViewport.name = "viewport";
@@ -976,9 +1001,24 @@
           window.scrollTo(0, originalScrollPos);
         });
 
-        // Prevent bounce scrolling
-        document.body.style.overflow = "hidden";
-        messagesContainer.style.overscrollBehavior = "none";
+        // Only apply overflow restrictions when chat is open
+        chatButton.addEventListener("click", () => {
+          if (!isOpen) {
+            document.body.style.overflow = "hidden";
+            messagesContainer.style.overscrollBehavior = "none";
+          } else {
+            document.body.style.overflow = "";
+            messagesContainer.style.overscrollBehavior = "";
+          }
+        });
+
+        // Also handle close button
+        chatWindow
+          .querySelector(".close-button")
+          .addEventListener("click", () => {
+            document.body.style.overflow = "";
+            messagesContainer.style.overscrollBehavior = "";
+          });
       }
     }
 
