@@ -560,6 +560,136 @@
                     border-radius: 3px;
                 }
             }
+
+            .message-footer {
+                display: flex;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 4px;
+                margin-top: 4px;
+            }
+
+            .message-status {
+                display: flex;
+                align-items: center;
+                color: #3b82f6;
+            }
+
+            .typing-indicator .message-content {
+                background: #f3f4f6;
+                padding: 8px 12px;
+                border-radius: 12px;
+            }
+
+            .typing-dots {
+                display: flex;
+                gap: 4px;
+                padding: 4px 0;
+            }
+
+            .typing-dot {
+                width: 6px;
+                height: 6px;
+                background: #6b7280;
+                border-radius: 50%;
+                animation: typing 1.4s infinite ease-in-out;
+            }
+
+            .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+            .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+            @keyframes typing {
+                0%, 80%, 100% { transform: scale(0); }
+                40% { transform: scale(1); }
+            }
+
+            .product-card {
+                margin-top: 12px;
+                background: white;
+                border-radius: 8px;
+                overflow: hidden;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+                border: 1px solid rgba(0, 0, 0, 0.05);
+            }
+
+            .product-image {
+                width: 100%;
+                height: 200px;
+                overflow: hidden;
+                background: #f9fafb;
+            }
+
+            .product-image img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                transition: transform 0.2s ease-in-out;
+            }
+
+            .product-card:hover .product-image img {
+                transform: scale(1.05);
+            }
+
+            .product-info {
+                padding: 12px;
+            }
+
+            .product-title {
+                font-size: 14px;
+                font-weight: 600;
+                color: #1f2937;
+                margin: 0 0 4px 0;
+                line-height: 1.4;
+            }
+
+            .product-price {
+                font-size: 16px;
+                font-weight: 700;
+                color: #3b82f6;
+                margin: 0;
+            }
+
+            .product-link {
+                display: block;
+                padding: 8px 12px;
+                background: #3b82f6;
+                color: white;
+                text-align: center;
+                text-decoration: none;
+                font-weight: 500;
+                transition: background-color 0.2s ease-in-out;
+            }
+
+            .product-link:hover {
+                background: #2563eb;
+            }
+
+            @media (max-width: 640px) {
+                .product-card {
+                    margin: 8px 0;
+                }
+
+                .product-image {
+                    height: 160px;
+                }
+
+                .product-info {
+                    padding: 8px;
+                }
+
+                .product-title {
+                    font-size: 13px;
+                }
+
+                .product-price {
+                    font-size: 14px;
+                }
+
+                .product-link {
+                    padding: 6px 10px;
+                    font-size: 14px;
+                }
+            }
         `;
 
     const styleSheet = document.createElement("style");
@@ -638,6 +768,37 @@
     function createMessageElement(message) {
       const messageDiv = document.createElement("div");
       messageDiv.className = `message ${message.sender}`;
+
+      let messageContent = message.text;
+      let productCard = "";
+
+      // Check if message contains a product URL
+      const productUrlRegex =
+        /(https?:\/\/[^\s]+\.myshopify\.com\/products\/[^\s]+)/g;
+      const matches = message.text.match(productUrlRegex);
+
+      if (matches) {
+        // Extract product handle from URL
+        const productHandle = matches[0].split("/products/")[1].split("?")[0];
+
+        // Create product card HTML
+        productCard = `
+          <div class="product-card">
+            <div class="product-image">
+              <img src="https://cdn.shopify.com/s/files/1/1304/8617/products/${productHandle}_small.jpg" alt="Product preview" loading="lazy">
+            </div>
+            <div class="product-info">
+              <h3 class="product-title">Loading product...</h3>
+              <p class="product-price">Loading price...</p>
+            </div>
+            <a href="${matches[0]}" target="_blank" class="product-link">View Product</a>
+          </div>
+        `;
+
+        // Fetch product details
+        fetchProductDetails(productHandle, messageDiv);
+      }
+
       messageDiv.innerHTML = `
         <div class="message-avatar">
             ${
@@ -653,29 +814,82 @@
             }
         </div>
         <div class="message-content">
-            <div class="message-text">${message.text}</div>
-            <div class="message-time">${formatDate(message.timestamp)}</div>
+            <div class="message-text">${messageContent}</div>
+            ${productCard}
+            <div class="message-footer">
+                <div class="message-time">${formatDate(message.timestamp)}</div>
+                ${
+                  message.sender === "user"
+                    ? `
+                    <div class="message-status">
+                        ${
+                          message.read
+                            ? `
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M20 6L9 17l-5-5"></path>
+                            </svg>
+                        `
+                            : `
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 5v14M5 12h14"></path>
+                            </svg>
+                        `
+                        }
+                    </div>
+                `
+                    : ""
+                }
+            </div>
         </div>
       `;
       return messageDiv;
     }
 
-    function createLoadingIndicator() {
-      const loadingDiv = document.createElement("div");
-      loadingDiv.className = "loading-indicator";
-      loadingDiv.innerHTML = `
+    async function fetchProductDetails(productHandle, messageElement) {
+      try {
+        const response = await fetch(`/products/${productHandle}.js`);
+        if (!response.ok) throw new Error("Product not found");
+
+        const product = await response.json();
+        const productCard = messageElement.querySelector(".product-card");
+        if (!productCard) return;
+
+        const titleElement = productCard.querySelector(".product-title");
+        const priceElement = productCard.querySelector(".product-price");
+
+        if (titleElement) titleElement.textContent = product.title;
+        if (priceElement) priceElement.textContent = `$${product.price / 100}`;
+
+        // Update product image if available
+        const imageElement = productCard.querySelector(".product-image img");
+        if (imageElement && product.images && product.images[0]) {
+          imageElement.src = product.images[0].src;
+        }
+      } catch (error) {
+        console.error("Error fetching product details:", error);
+        const productCard = messageElement.querySelector(".product-card");
+        if (productCard) {
+          productCard.remove();
+        }
+      }
+    }
+
+    function createTypingIndicator() {
+      const typingDiv = document.createElement("div");
+      typingDiv.className = "message bot typing-indicator";
+      typingDiv.innerHTML = `
         <div class="message-avatar">
             <img src="${LOGO_URL}" alt="Bot avatar" width="24" height="24" style="object-fit: contain; padding: 2px;">
         </div>
         <div class="message-content">
-            <div class="flex gap-1">
-                <div class="loading-dot"></div>
-                <div class="loading-dot"></div>
-                <div class="loading-dot"></div>
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
             </div>
         </div>
       `;
-      return loadingDiv;
+      return typingDiv;
     }
 
     function scrollToBottom() {
@@ -727,90 +941,143 @@
         return data;
       } catch (error) {
         console.error("Error creating ticket:", error);
+        // Add user-friendly error message
+        const errorMessage = {
+          sender: "bot",
+          text: "Lo siento, estamos teniendo problemas técnicos. Por favor, intenta de nuevo en unos minutos.",
+          timestamp: new Date().toISOString(),
+        };
+        messages.push(errorMessage);
+        messagesContainer.appendChild(createMessageElement(errorMessage));
+        scrollToBottom();
         throw error;
       }
     }
 
     async function addMessageToTicket(ticketId, message) {
-      try {
-        console.log("Adding message to ticket:", { ticketId, message });
-        const response = await fetch(`${API_BASE_URL}/api/messages`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-          credentials: "omit",
-          body: JSON.stringify({
-            ticketId,
-            message: {
-              sender: message.sender,
-              text: message.text,
-              timestamp: message.timestamp,
-              ticketId: ticketId,
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          console.log("Adding message to ticket:", { ticketId, message });
+          const response = await fetch(`${API_BASE_URL}/api/messages`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
             },
-          }),
-        });
-        console.log("Add message response status:", response.status);
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Error adding message:", {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText,
+            mode: "cors",
+            credentials: "omit",
+            body: JSON.stringify({
+              ticketId,
+              message: {
+                sender: message.sender,
+                text: message.text,
+                timestamp: message.timestamp,
+                ticketId: ticketId,
+              },
+            }),
           });
-          throw new Error(
-            `HTTP error! status: ${response.status}\n${errorText}`
+          console.log("Add message response status:", response.status);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error adding message:", {
+              status: response.status,
+              statusText: response.statusText,
+              body: errorText,
+            });
+            throw new Error(
+              `HTTP error! status: ${response.status}\n${errorText}`
+            );
+          }
+          const data = await response.json();
+          console.log("Add message response data:", data);
+          return data;
+        } catch (error) {
+          console.error(
+            `Error adding message (${retries} retries left):`,
+            error
+          );
+          retries--;
+          if (retries === 0) {
+            // Add user-friendly error message
+            const errorMessage = {
+              sender: "bot",
+              text: "Lo siento, no pudimos enviar tu mensaje. Por favor, intenta de nuevo.",
+              timestamp: new Date().toISOString(),
+            };
+            messages.push(errorMessage);
+            messagesContainer.appendChild(createMessageElement(errorMessage));
+            scrollToBottom();
+            throw error;
+          }
+          // Wait before retrying (exponential backoff)
+          await new Promise((resolve) =>
+            setTimeout(resolve, (3 - retries) * 1000)
           );
         }
-        const data = await response.json();
-        console.log("Add message response data:", data);
-        return data;
-      } catch (error) {
-        console.error("Error adding message:", error);
-        throw error;
       }
     }
 
     async function getBotResponse(message) {
-      try {
-        console.log("Getting bot response for message:", message);
-        const response = await fetch(`${API_BASE_URL}/api`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          mode: "cors",
-          credentials: "omit",
-          body: JSON.stringify({
-            message,
-            context: messages.map((msg) => ({
-              role: msg.sender === "user" ? "user" : "assistant",
-              content: msg.text,
-            })),
-            currentTicket,
-          }),
-        });
-        console.log("Get bot response status:", response.status);
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error("Error getting bot response:", {
-            status: response.status,
-            statusText: response.statusText,
-            body: errorText,
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          console.log("Getting bot response for message:", message);
+          const response = await fetch(`${API_BASE_URL}/api`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+            mode: "cors",
+            credentials: "omit",
+            body: JSON.stringify({
+              message,
+              context: messages.map((msg) => ({
+                role: msg.sender === "user" ? "user" : "assistant",
+                content: msg.text,
+              })),
+              currentTicket,
+            }),
           });
-          throw new Error(
-            `HTTP error! status: ${response.status}\n${errorText}`
+          console.log("Get bot response status:", response.status);
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error("Error getting bot response:", {
+              status: response.status,
+              statusText: response.statusText,
+              body: errorText,
+            });
+            throw new Error(
+              `HTTP error! status: ${response.status}\n${errorText}`
+            );
+          }
+          const data = await response.json();
+          console.log("Get bot response data:", data);
+          return data;
+        } catch (error) {
+          console.error(
+            `Error getting bot response (${retries} retries left):`,
+            error
+          );
+          retries--;
+          if (retries === 0) {
+            // Add user-friendly error message
+            const errorMessage = {
+              sender: "bot",
+              text: "Lo siento, estoy teniendo problemas para responder. Por favor, intenta de nuevo en unos minutos.",
+              timestamp: new Date().toISOString(),
+            };
+            messages.push(errorMessage);
+            messagesContainer.appendChild(createMessageElement(errorMessage));
+            scrollToBottom();
+            throw error;
+          }
+          // Wait before retrying (exponential backoff)
+          await new Promise((resolve) =>
+            setTimeout(resolve, (3 - retries) * 1000)
           );
         }
-        const data = await response.json();
-        console.log("Get bot response data:", data);
-        return data;
-      } catch (error) {
-        console.error("Error getting bot response:", error);
-        throw error;
       }
     }
 
@@ -824,7 +1091,7 @@
             console.log("Initializing chat...");
             const initialMessage = {
               sender: "bot",
-              text: "👋 Qué pasa crack? En qué te puedo ayudar?",
+              text: "👋 Hola!! En qué te puedo ayudar?",
               timestamp: new Date().toISOString(),
             };
             const ticket = await createTicket(initialMessage);
@@ -877,7 +1144,6 @@
     submitButton.setAttribute("type", "button");
 
     submitButton.addEventListener("click", async (e) => {
-      // Prevent default button behavior and stop event propagation
       e.preventDefault();
       e.stopPropagation();
 
@@ -889,6 +1155,7 @@
         sender: "user",
         text: message,
         timestamp: new Date().toISOString(),
+        read: false,
       };
 
       try {
@@ -902,9 +1169,9 @@
         messagesContainer.appendChild(createMessageElement(userMessage));
         scrollToBottom();
 
-        // Add loading indicator
-        const loadingIndicator = createLoadingIndicator();
-        messagesContainer.appendChild(loadingIndicator);
+        // Add typing indicator
+        const typingIndicator = createTypingIndicator();
+        messagesContainer.appendChild(typingIndicator);
         scrollToBottom();
 
         // Save message to database
@@ -923,9 +1190,18 @@
           };
           await addMessageToTicket(currentTicket.id, botMessage);
           messages.push(botMessage);
-          messagesContainer.removeChild(loadingIndicator);
+          messagesContainer.removeChild(typingIndicator);
           messagesContainer.appendChild(createMessageElement(botMessage));
           scrollToBottom();
+
+          // Mark user message as read
+          userMessage.read = true;
+          const userMessageElement = messagesContainer.querySelector(
+            `.message.user:last-child`
+          );
+          if (userMessageElement) {
+            userMessageElement.replaceWith(createMessageElement(userMessage));
+          }
         } else {
           throw new Error("Invalid bot response");
         }
