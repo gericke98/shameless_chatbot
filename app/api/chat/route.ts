@@ -15,8 +15,31 @@ import {
 import { ClassifiedMessage } from "@/types";
 import { ChatMessage } from "@/types";
 import { MessageParameters } from "@/app/types/api";
+import { handleError } from "../utils/error-handler";
 
 export const dynamic = "force-dynamic";
+
+const ALLOWED_ORIGINS = [
+  "https://shamelesscollective.com",
+  "https://shameless-test.myshopify.com",
+];
+
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin || "")
+    ? origin || ALLOWED_ORIGINS[0]
+    : ALLOWED_ORIGINS[0],
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Max-Age": "86400", // 24 hours
+});
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(origin),
+  });
+}
 
 // Validation schema
 const chatRequestSchema = z.object({
@@ -32,6 +55,7 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
   try {
     const body = await request.json();
     const validatedRequest = chatRequestSchema.parse(body);
@@ -124,10 +148,13 @@ export async function POST(request: NextRequest) {
           "I'm not sure how to help with that. Could you please rephrase your question?";
     }
 
-    return NextResponse.json({
-      status: 200,
-      data: { response },
-    });
+    return NextResponse.json(
+      {
+        status: 200,
+        data: { response },
+      },
+      { headers: corsHeaders(origin) }
+    );
   } catch (error) {
     console.error("Error processing chat request:", error);
     if (error instanceof z.ZodError) {
@@ -136,7 +163,7 @@ export async function POST(request: NextRequest) {
           status: 400,
           error: `Invalid request data: ${error.errors[0].message}`,
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
     if (error instanceof Error && error.message === "Classification timeout") {
@@ -145,15 +172,9 @@ export async function POST(request: NextRequest) {
           status: 408,
           error: "Request timed out. Please try again.",
         },
-        { status: 408 }
+        { status: 408, headers: corsHeaders(origin) }
       );
     }
-    return NextResponse.json(
-      {
-        status: 500,
-        error: "Failed to process chat request",
-      },
-      { status: 500 }
-    );
+    return handleError(error, undefined, origin);
   }
 }

@@ -1,9 +1,36 @@
 import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import db from "@/db/drizzle";
 import { messages } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { handleError } from "../../utils/error-handler";
 
-export async function GET(request: Request) {
+export const dynamic = "force-dynamic";
+
+const ALLOWED_ORIGINS = [
+  "https://shamelesscollective.com",
+  "https://shameless-test.myshopify.com",
+];
+
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin || "")
+    ? origin || ALLOWED_ORIGINS[0]
+    : ALLOWED_ORIGINS[0],
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Max-Age": "86400", // 24 hours
+});
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(origin),
+  });
+}
+
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get("origin");
   try {
     const { searchParams } = new URL(request.url);
     const ticketId = searchParams.get("ticketId");
@@ -11,7 +38,7 @@ export async function GET(request: Request) {
     if (!ticketId) {
       return NextResponse.json(
         { error: "Ticket ID is required" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
@@ -20,17 +47,15 @@ export async function GET(request: Request) {
       .from(messages)
       .where(eq(messages.ticketId, ticketId));
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: corsHeaders(origin) });
   } catch (error) {
     console.error("Error fetching messages:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch messages" },
-      { status: 500 }
-    );
+    return handleError(error, undefined, origin);
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
   try {
     const body = await request.json();
     const { sender, text, ticketId } = body;
@@ -38,7 +63,7 @@ export async function POST(request: Request) {
     if (!sender || !text || !ticketId) {
       return NextResponse.json(
         { error: "Missing required fields" },
-        { status: 400 }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
 
@@ -50,12 +75,9 @@ export async function POST(request: Request) {
     };
 
     const result = await db.insert(messages).values(newMessage).returning();
-    return NextResponse.json(result[0]);
+    return NextResponse.json(result[0], { headers: corsHeaders(origin) });
   } catch (error) {
     console.error("Error creating message:", error);
-    return NextResponse.json(
-      { error: "Failed to create message" },
-      { status: 500 }
-    );
+    return handleError(error, undefined, origin);
   }
 }
