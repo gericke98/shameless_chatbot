@@ -3,8 +3,31 @@ import { NextRequest } from "next/server";
 import db from "@/db/drizzle";
 import { tickets, messages } from "@/db/schema";
 import { z } from "zod";
+import { handleError } from "../utils/error-handler";
 
 export const dynamic = "force-dynamic";
+
+const ALLOWED_ORIGINS = [
+  "https://shamelesscollective.com",
+  "https://shameless-test.myshopify.com",
+];
+
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin || "")
+    ? origin || ALLOWED_ORIGINS[0]
+    : ALLOWED_ORIGINS[0],
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Max-Age": "86400", // 24 hours
+});
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get("origin");
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(origin),
+  });
+}
 
 // Validation schema
 const messageSchema = z.object({
@@ -18,6 +41,7 @@ const messageSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const origin = request.headers.get("origin");
   try {
     const body = await request.json();
     const validatedMessage = messageSchema.parse(body);
@@ -47,10 +71,13 @@ export async function POST(request: NextRequest) {
       ticketId: ticketId,
     });
 
-    return NextResponse.json({
-      status: 200,
-      data: newTicket[0],
-    });
+    return NextResponse.json(
+      {
+        status: 200,
+        data: newTicket[0],
+      },
+      { headers: corsHeaders(origin) }
+    );
   } catch (error) {
     console.error("Error creating ticket:", error);
     if (error instanceof z.ZodError) {
@@ -59,16 +86,10 @@ export async function POST(request: NextRequest) {
           status: 400,
           error: `Invalid message data: ${error.errors[0].message}`,
         },
-        { status: 400 }
+        { status: 400, headers: corsHeaders(origin) }
       );
     }
-    return NextResponse.json(
-      {
-        status: 500,
-        error: "Failed to create ticket",
-      },
-      { status: 500 }
-    );
+    return handleError(error, undefined, origin);
   }
 }
 
