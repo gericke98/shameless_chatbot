@@ -20,9 +20,24 @@ interface ErrorResponse {
   };
 }
 
+const ALLOWED_ORIGINS = [
+  "https://shamelesscollective.com",
+  "https://shameless-test.myshopify.com",
+];
+
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin || "")
+    ? origin || ALLOWED_ORIGINS[0]
+    : ALLOWED_ORIGINS[0],
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Max-Age": "86400", // 24 hours
+});
+
 export function handleError(
   error: unknown,
-  requestId?: string
+  requestId?: string,
+  origin?: string | null
 ): NextResponse<ErrorResponse> {
   console.error("[Error]", {
     timestamp: new Date().toISOString(),
@@ -37,13 +52,6 @@ export function handleError(
         : error,
   });
 
-  const corsHeaders = {
-    "Access-Control-Allow-Origin":
-      "https://shamelesscollective.com,https://shameless-test.myshopify.com",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
-  };
-
   if (error instanceof APIError) {
     return NextResponse.json(
       {
@@ -56,7 +64,7 @@ export function handleError(
       },
       {
         status: error.statusCode,
-        headers: corsHeaders,
+        headers: corsHeaders(origin || null),
       }
     );
   }
@@ -73,7 +81,7 @@ export function handleError(
     },
     {
       status: 500,
-      headers: corsHeaders,
+      headers: corsHeaders(origin || null),
     }
   );
 }

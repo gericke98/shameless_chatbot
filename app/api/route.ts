@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
       { path: request.nextUrl.pathname },
       requestId
     );
-    return handleError(error, requestId);
+    return handleError(error, requestId, origin);
   }
 }
 
@@ -320,6 +320,6 @@ export async function POST(req: NextRequest): Promise<Response> {
       { path: req.nextUrl.pathname },
       requestId
     );
-    return handleError(error, requestId);
+    return handleError(error, requestId, origin);
   }
 }
