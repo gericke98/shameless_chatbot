@@ -10,9 +10,12 @@ import {
   NoOrderNumberOrEmail,
   InvalidCredentials,
   validateOrderParameters,
+  handleOpenAIError,
+  getLanguageSpecificResponse,
 } from "./utils";
 import { sendEmail } from "../mail";
 import { OpenAIMessage, Order } from "@/types";
+import { responseCache, commonResponses } from "../utils/cache";
 
 export async function handleOrderTracking(
   parameters: MessageParameters,
@@ -27,52 +30,64 @@ export async function handleOrderTracking(
   });
 
   try {
+    // Validate parameters
     if (!validateOrderParameters(parameters)) {
-      logger.warn("Invalid order parameters for tracking", {
-        order_number,
-        email,
-      });
+      logger.warn("Invalid order parameters", { order_number, email });
       return await NoOrderNumberOrEmail(language);
     }
 
-    const shopifyData = await trackOrder(order_number, email);
+    // Check cache for common responses
+    const cacheKey = `order_tracking_${order_number}_${email}_${language}`;
+    const cachedResponse = responseCache.get(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    // Get order data
+    const shopifyData = await extractCompleteOrder(order_number, email);
     if (!shopifyData.success) {
-      logger.error("Failed to track order", new Error(shopifyData.error), {
-        order_number,
-        email,
-      });
+      logger.error(
+        "Failed to extract order data",
+        new Error(shopifyData.error),
+        {
+          order_number,
+          email,
+        }
+      );
       return await InvalidCredentials(language, shopifyData.error);
     }
 
     if (!shopifyData.order) {
-      logger.warn("Order not found in tracking data", { order_number, email });
+      logger.warn("Order not found", { order_number, email });
       return language === "Spanish"
         ? "Lo siento, no he podido encontrar información sobre tu pedido."
         : "Sorry, I couldn't find information about your order.";
     }
 
-    logger.info("Successfully retrieved order tracking data", {
-      order_number,
-      email,
-      status: shopifyData.order.fulfillments?.[0]?.status,
-    });
-
-    return await aiService.generateFinalAnswer(
+    // Generate response using AI
+    const response = await aiService.generateFinalAnswer(
       "order_tracking",
       parameters,
       shopifyData,
-      "",
+      context[context.length - 1].content,
       context,
       language
     );
+
+    // Cache the response for 5 minutes
+    responseCache.set(cacheKey, response, 5 * 60 * 1000);
+    return response;
   } catch (error) {
     logger.error("Error handling order tracking", error as Error, {
       order_number,
       email,
+      language,
     });
-    return language === "Spanish"
-      ? "Lo siento, ha ocurrido un error al buscar tu pedido. Por favor, intenta de nuevo más tarde."
-      : "Sorry, there was an error searching for your order. Please try again later.";
+    return getLanguageSpecificResponse(
+      commonResponses.error.es,
+      commonResponses.error.en,
+      language
+    );
   }
 }
 
@@ -147,14 +162,18 @@ export async function handleDeliveryIssue(
       }
     }
 
-    return await aiService.generateFinalAnswer(
-      "delivery_issue",
-      parameters,
-      shopifyData,
-      message,
-      context,
-      language
-    );
+    try {
+      return await aiService.generateFinalAnswer(
+        "delivery_issue",
+        parameters,
+        shopifyData,
+        message,
+        context,
+        language
+      );
+    } catch (error) {
+      return handleOpenAIError(error, language);
+    }
   } catch (error) {
     logger.error("Error handling delivery issue", error as Error, {
       order_number,
@@ -214,82 +233,90 @@ export async function handleChangeDelivery(
 
     if (!new_delivery_info) {
       logger.debug("No new delivery info provided", { order_number, email });
-      return await aiService.confirmDeliveryAddress(
-        parameters,
-        message,
-        context,
-        language
-      );
-    }
-
-    const addressValidation =
-      await aiService.validateAddress(new_delivery_info);
-    if (!addressValidation.formattedAddress) {
-      logger.warn("Invalid delivery address format", {
-        order_number,
-        email,
-        new_delivery_info,
-      });
-      return await aiService.confirmDeliveryAddress(
-        parameters,
-        message,
-        context,
-        language
-      );
-    }
-
-    if (delivery_address_confirmed) {
-      if (!hasFulfillments) {
-        // Order not yet shipped
-        try {
-          logger.info("Updating shipping address for unshipped order", {
-            order_number,
-            email,
-            new_address: addressValidation.formattedAddress,
-          });
-          await updateShippingAddress(
-            order.admin_graphql_api_id,
-            addressValidation.formattedAddress,
-            {
-              first_name: order.shipping_address.first_name || "",
-              last_name: order.shipping_address.last_name || "",
-              phone: order.shipping_address.phone || "",
-            }
-          );
-          logger.info("Successfully updated shipping address", {
-            order_number,
-            email,
-          });
-
-          return language === "Spanish"
-            ? `¡Perfecto! He actualizado la dirección de envío a:\n\n${addressValidation.formattedAddress}\n\n¡Tu pedido se enviará a esta nueva dirección! 📦✨`
-            : `Perfect! I've updated the shipping address to:\n\n${addressValidation.formattedAddress}\n\nYour order will be shipped to this new address! 📦✨`;
-        } catch (error) {
-          logger.error("Failed to update shipping address", error as Error, {
-            order_number,
-            email,
-            new_address: addressValidation.formattedAddress,
-          });
-          return language === "Spanish"
-            ? "Lo siento, ha ocurrido un error al actualizar la dirección. Por favor, intenta de nuevo más tarde."
-            : "Sorry, there was an error updating the address. Please try again later.";
-        }
-      } else {
-        // Order already shipped - initiate call to shipping company
-        return await handleShippedOrderAddressChange(
-          order,
-          addressValidation.formattedAddress,
+      try {
+        return await aiService.confirmDeliveryAddress(
+          parameters,
+          message,
+          context,
           language
         );
+      } catch (error) {
+        return handleOpenAIError(error, language);
       }
     }
 
-    return await aiService.confirmDeliveryAddress(
-      parameters,
-      message,
-      context,
-      language
-    );
+    try {
+      const addressValidation =
+        await aiService.validateAddress(new_delivery_info);
+      if (!addressValidation.formattedAddress) {
+        logger.warn("Invalid delivery address format", {
+          order_number,
+          email,
+          new_delivery_info,
+        });
+        return await aiService.confirmDeliveryAddress(
+          parameters,
+          message,
+          context,
+          language
+        );
+      }
+
+      if (delivery_address_confirmed) {
+        if (!hasFulfillments) {
+          // Order not yet shipped
+          try {
+            logger.info("Updating shipping address for unshipped order", {
+              order_number,
+              email,
+              new_address: addressValidation.formattedAddress,
+            });
+            await updateShippingAddress(
+              order.admin_graphql_api_id,
+              addressValidation.formattedAddress,
+              {
+                first_name: order.shipping_address.first_name || "",
+                last_name: order.shipping_address.last_name || "",
+                phone: order.shipping_address.phone || "",
+              }
+            );
+            logger.info("Successfully updated shipping address", {
+              order_number,
+              email,
+            });
+
+            return language === "Spanish"
+              ? `¡Perfecto! He actualizado la dirección de envío a:\n\n${addressValidation.formattedAddress}\n\n¡Tu pedido se enviará a esta nueva dirección! 📦✨`
+              : `Perfect! I've updated the shipping address to:\n\n${addressValidation.formattedAddress}\n\nYour order will be shipped to this new address! 📦✨`;
+          } catch (error) {
+            logger.error("Failed to update shipping address", error as Error, {
+              order_number,
+              email,
+              new_address: addressValidation.formattedAddress,
+            });
+            return language === "Spanish"
+              ? "Lo siento, ha ocurrido un error al actualizar la dirección. Por favor, intenta de nuevo más tarde."
+              : "Sorry, there was an error updating the address. Please try again later.";
+          }
+        } else {
+          // Order already shipped - initiate call to shipping company
+          return await handleShippedOrderAddressChange(
+            order,
+            addressValidation.formattedAddress,
+            language
+          );
+        }
+      }
+
+      return await aiService.confirmDeliveryAddress(
+        parameters,
+        message,
+        context,
+        language
+      );
+    } catch (error) {
+      return handleOpenAIError(error, language);
+    }
   } catch (error) {
     logger.error("Error handling delivery address change", error as Error, {
       order_number,

@@ -7,6 +7,8 @@ import {
   ShopifyDataTracking,
 } from "@/types";
 import { getAllActiveProducts } from "../queries/order";
+import { getLanguageSpecificResponse } from "./intents/utils";
+import { commonResponses } from "./utils/cache";
 
 export class AIService {
   private readonly apiKey: string;
@@ -151,7 +153,7 @@ Size recommendation guidelines:
   };
 
   private RETURNS_PORTAL_URL: string;
-  private readonly MODEL = process.env.OPENAI_MODEL || "gpt-4-turbo-preview";
+  private readonly MODEL = process.env.OPENAI_MODEL || "gpt-4o-mini";
   private readonly MAX_RETRIES = 3;
   private readonly RETRY_DELAY = 1000;
 
@@ -483,17 +485,23 @@ Size recommendation guidelines:
     language?: string,
     sizeCharts?: string
   ): Promise<string> {
+    // For conversation_end intent, return cached response
+    if (intent === "conversation_end") {
+      return getLanguageSpecificResponse(
+        commonResponses.conversationEnd.es,
+        commonResponses.conversationEnd.en,
+        language || "English"
+      );
+    }
+
     // Validate inputs
     if (!intent || typeof intent !== "string") {
       console.error("Invalid intent provided:", intent);
-      return "Sorry, I couldn't process your request. Please try again.";
-    }
-
-    // For conversation_end intent, return a nice closing message
-    if (intent === "conversation_end") {
-      return language === "Spanish"
-        ? "¡Gracias por confiar en Shameless Collective! ¡Que tengas un buen día! 🙌✨"
-        : "Thank you for trusting Shameless Collective! Have a great day! 🙌✨";
+      return getLanguageSpecificResponse(
+        commonResponses.error.es,
+        commonResponses.error.en,
+        language || "English"
+      );
     }
 
     const sanitizedUserMessage = this.sanitizeInput(userMessage);
@@ -506,7 +514,18 @@ Size recommendation guidelines:
     let shopifyDataString = "";
     if (shopifyData?.success && shopifyData?.order) {
       try {
-        shopifyDataString = JSON.stringify(shopifyData.order, null, 2);
+        // Only include essential order data to reduce token usage
+        const order = Array.isArray(shopifyData.order)
+          ? shopifyData.order[0]
+          : shopifyData.order;
+
+        const essentialData = {
+          order_number: order.name,
+          status: order.fulfillments?.[0]?.status,
+          tracking_number: order.fulfillments?.[0]?.tracking_number,
+          shipping_address: order.shipping_address,
+        };
+        shopifyDataString = JSON.stringify(essentialData, null, 2);
       } catch (error) {
         console.error("Error stringifying shopifyData:", error);
         shopifyDataString = "Error processing order data";
@@ -573,9 +592,11 @@ Size recommendation guidelines:
       return data.choices[0].message.content;
     } catch (error) {
       console.error("Error generating final answer:", error);
-      return language === "Spanish"
-        ? "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, inténtalo de nuevo."
-        : "Sorry, an error occurred while processing your request. Please try again.";
+      return getLanguageSpecificResponse(
+        commonResponses.error.es,
+        commonResponses.error.en,
+        language || "English"
+      );
     }
   }
 

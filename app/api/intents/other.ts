@@ -13,22 +13,35 @@ import { InvoiceData } from "@/types";
 import { sendEmail } from "../mail";
 import { jsPDF } from "jspdf";
 import { logger } from "../utils/logger";
+import { responseCache, commonResponses } from "../utils/cache";
 
 export async function handleReturnsExchange(language: string): Promise<string> {
   try {
     logger.info("Handling returns/exchange request", { language });
-    return getLanguageSpecificResponse(
-      "¡Claro! Puedes hacer el cambio o devolución en el siguiente link: https://shameless-returns-web.vercel.app. Recuerda que el número de pedido es algo como #35500 y lo puedes encontrar en el correo de confirmación de pedido.",
-      "Sure thing! You can make the change or return in the following link: https://shameless-returns-web.vercel.app. Remember that the order number is of the form #35500 and you can find it in the order confirmation email.",
+
+    // Check cache first
+    const cacheKey = `returns_exchange_${language}`;
+    const cachedResponse = responseCache.get(cacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    // If not in cache, get response and cache it
+    const response = getLanguageSpecificResponse(
+      commonResponses.returnsExchange.es,
+      commonResponses.returnsExchange.en,
       language
     );
+
+    responseCache.set(cacheKey, response);
+    return response;
   } catch (error) {
     logger.error("Error handling returns/exchange request", error as Error, {
       language,
     });
     return getLanguageSpecificResponse(
-      "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde.",
-      "Sorry, there was an error. Please try again later.",
+      commonResponses.error.es,
+      commonResponses.error.en,
       language
     );
   }
@@ -44,9 +57,11 @@ export async function handlePromoCode(
   try {
     if (!email || typeof email !== "string") {
       logger.debug("No email provided for promo code request");
-      return language === "Spanish"
-        ? "Vamos a hacer una cosa, si me dejas tu email te crearé un descuento del 20% que podrás usar durante los próximos 15 minutos😊"
-        : "Perfect! If you share your email with me, I'll notify you when the product is back in stock 😊";
+      return getLanguageSpecificResponse(
+        commonResponses.promoCodeRequest.es,
+        commonResponses.promoCodeRequest.en,
+        language
+      );
     }
 
     // Create customer

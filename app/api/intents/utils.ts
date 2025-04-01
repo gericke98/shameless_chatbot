@@ -45,3 +45,33 @@ export function getLanguageSpecificResponse(
 ): string {
   return language === "Spanish" ? spanish : english;
 }
+
+interface OpenAIError {
+  error?: {
+    message: string;
+    type: string;
+    param: null;
+    code: string;
+  };
+}
+
+export const handleOpenAIError = (error: unknown, language: string): string => {
+  const openAIError = error as OpenAIError;
+  if (openAIError?.error?.code === "insufficient_quota") {
+    logger.error(
+      "OpenAI API quota exceeded",
+      new Error(openAIError.error.message)
+    );
+    return language === "Spanish"
+      ? "Lo siento, estamos experimentando una alta demanda en este momento. Por favor, intenta de nuevo en unos minutos."
+      : "Sorry, we're experiencing high demand at the moment. Please try again in a few minutes.";
+  }
+
+  logger.error(
+    "OpenAI API error",
+    new Error(openAIError?.error?.message || "Unknown OpenAI error")
+  );
+  return language === "Spanish"
+    ? "Lo siento, ha ocurrido un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
+    : "Sorry, there was an error processing your request. Please try again later.";
+};
