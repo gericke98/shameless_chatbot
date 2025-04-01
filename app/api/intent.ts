@@ -743,9 +743,18 @@ export async function handlePromoCode(
   // Create customer
   const response = await insertCustomer(email);
   if (response.error == "Email has already been taken") {
-    return language === "Spanish"
-      ? `Vaya! Parece que ese email ya lo tenemos registrado. ¿Podrías intentarlo con otro?`
-      : `Oops! It seems that email is already registered. Could you try with another one?`;
+    // Esto lo puedo cambiar pero bueno
+    const promoCode = await createPromoCode();
+    console.log("promoCode", promoCode);
+    if (promoCode.success) {
+      return language === "Spanish"
+        ? `Aquí tienes tu descuento del 20%: ${promoCode.code}. Hemos visto que ya eres cliente nuestro, así que te lo regalamos. No se lo digas a nadie! Caduca en 15 minutos por lo que aprovéchalo!`
+        : `Here's your 20% discount code: ${promoCode.code}. We've seen that you're already a customer, so we're giving it to you for free. Don't tell anyone! It expires in 15 minutes so take advantage of it!`;
+    } else {
+      return language === "Spanish"
+        ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
+        : "I'm sorry, there was an error creating the discount. Could you please try again?";
+    }
   }
   console.log("response customer", response);
   if (response.success) {

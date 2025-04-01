@@ -14,9 +14,11 @@ import {
   handleUpdateOrder,
   InvalidCredentials,
   NoOrderNumberOrEmail,
-} from "./intent";
-import { handleOrderTracking } from "./intent";
+  handleOrderTracking,
+  handleReturnsExchange,
+} from "./intents";
 import { handleError, APIError, createRequestId } from "./utils/error-handler";
+import { logger } from "./utils/logger";
 import {
   ClassifiedMessage,
   Intent,
@@ -27,20 +29,30 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+const CORS_ORIGIN =
+  process.env.CORS_ORIGIN || "https://shamelesscollective.com";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": CORS_ORIGIN,
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
+  "Access-Control-Max-Age": "86400", // 24 hours
+};
+
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "https://shamelesscollective.com",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
-      "Access-Control-Max-Age": "86400", // 24 hours
-    },
+    headers: corsHeaders,
   });
 }
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId();
+  logger.info(
+    "Received GET request",
+    { path: request.nextUrl.pathname },
+    requestId
+  );
 
   try {
     const ticketId = request.nextUrl.searchParams.get("ticketId");
@@ -54,18 +66,34 @@ export async function GET(request: NextRequest) {
     }
 
     const messages = await getMessages(ticketId);
-    return NextResponse.json<APIResponse>({
-      data: { messages },
-      requestId,
-      timestamp: new Date().toISOString(),
-    });
+    logger.info("Retrieved messages successfully", { ticketId }, requestId);
+
+    return NextResponse.json<APIResponse>(
+      {
+        data: { messages },
+        requestId,
+        timestamp: new Date().toISOString(),
+      },
+      { headers: corsHeaders }
+    );
   } catch (error) {
+    logger.error(
+      "Error in GET request",
+      error as Error,
+      { path: request.nextUrl.pathname },
+      requestId
+    );
     return handleError(error, requestId);
   }
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = createRequestId();
+  logger.info(
+    "Received POST request",
+    { path: req.nextUrl.pathname },
+    requestId
+  );
 
   try {
     // Validate content type
@@ -83,7 +111,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     try {
       body = await req.json();
     } catch (error) {
-      console.error("Error parsing request body:", error);
+      logger.error("Error parsing request body", error as Error, {}, requestId);
       throw new APIError("Invalid JSON in request body", 400, "INVALID_JSON");
     }
 
@@ -114,6 +142,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     // Message classification with timeout
+    logger.debug("Starting message classification", { message }, requestId);
     const classificationPromise = aiService.classifyMessage(message, context);
     const classification = (await Promise.race([
       classificationPromise,
@@ -132,10 +161,10 @@ export async function POST(req: NextRequest): Promise<Response> {
       ),
     ])) as ClassifiedMessage;
 
+    logger.logIntentClassification(message, classification, requestId);
     const { intent, parameters, language } = classification;
 
     // Handle ticket updates
-    let updatedTicket = null;
     if (
       currentTicket?.id &&
       parameters.order_number &&
@@ -149,14 +178,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             requestId,
             timestamp: new Date().toISOString(),
           },
-          {
-            headers: {
-              "Access-Control-Allow-Origin": "https://shamelesscollective.com",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers":
-                "Content-Type, Authorization, Accept",
-            },
-          }
+          { headers: corsHeaders }
         );
       }
 
@@ -166,6 +188,15 @@ export async function POST(req: NextRequest): Promise<Response> {
       );
 
       if (!shopifyData.success) {
+        logger.warn(
+          "Invalid credentials",
+          {
+            orderNumber: parameters.order_number,
+            error: shopifyData.error,
+          },
+          requestId
+        );
+
         return NextResponse.json<APIResponse>(
           {
             data: {
@@ -174,22 +205,23 @@ export async function POST(req: NextRequest): Promise<Response> {
             requestId,
             timestamp: new Date().toISOString(),
           },
-          {
-            headers: {
-              "Access-Control-Allow-Origin": "https://shamelesscollective.com",
-              "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-              "Access-Control-Allow-Headers":
-                "Content-Type, Authorization, Accept",
-            },
-          }
+          { headers: corsHeaders }
         );
       }
 
-      updatedTicket = await updateTicketWithOrderInfo(
+      await updateTicketWithOrderInfo(
         currentTicket.id,
         parameters.order_number,
         parameters.email,
         shopifyData.order?.customer
+      );
+      logger.info(
+        "Updated ticket with order info",
+        {
+          ticketId: currentTicket.id,
+          orderNumber: parameters.order_number,
+        },
+        requestId
       );
     }
 
@@ -198,14 +230,12 @@ export async function POST(req: NextRequest): Promise<Response> {
       intent: Intent,
       parameters: MessageParameters
     ) => {
-      console.log("intent", intent);
+      logger.debug("Processing intent", { intent, parameters }, requestId);
       switch (intent) {
         case "order_tracking":
           return handleOrderTracking(parameters, context, language);
         case "returns_exchange":
-          return language === "Spanish"
-            ? "¡Claro! Puedes hacer el cambio o devolución en el siguiente link: https://shameless-returns-web.vercel.app"
-            : "Sure thing! You can make the change or return in the following link: https://shameless-returns-web.vercel.app";
+          return handleReturnsExchange(language);
         case "delivery_issue":
           return handleDeliveryIssue(parameters, message, context, language);
         case "change_delivery":
@@ -257,9 +287,9 @@ export async function POST(req: NextRequest): Promise<Response> {
           () =>
             reject(
               new APIError(
-                "Response generation timeout",
+                "Intent processing timeout",
                 408,
-                "RESPONSE_TIMEOUT"
+                "INTENT_PROCESSING_TIMEOUT"
               )
             ),
           30000
@@ -267,21 +297,22 @@ export async function POST(req: NextRequest): Promise<Response> {
       ),
     ]);
 
+    logger.info("Successfully processed request", { intent }, requestId);
     return NextResponse.json<APIResponse>(
       {
-        data: { response, updatedTicket },
+        data: { response },
         requestId,
         timestamp: new Date().toISOString(),
       },
-      {
-        headers: {
-          "Access-Control-Allow-Origin": "https://shamelesscollective.com",
-          "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
-        },
-      }
+      { headers: corsHeaders }
     );
   } catch (error) {
+    logger.error(
+      "Error in POST request",
+      error as Error,
+      { path: req.nextUrl.pathname },
+      requestId
+    );
     return handleError(error, requestId);
   }
 }
