@@ -29,25 +29,31 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const CORS_ORIGIN =
-  process.env.CORS_ORIGIN || "https://shamelesscollective.com";
+const ALLOWED_ORIGINS = [
+  "https://shamelesscollective.com",
+  "https://shameless-test.myshopify.com",
+];
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": CORS_ORIGIN,
+const corsHeaders = (origin: string | null): Record<string, string> => ({
+  "Access-Control-Allow-Origin": ALLOWED_ORIGINS.includes(origin || "")
+    ? origin || ALLOWED_ORIGINS[0]
+    : ALLOWED_ORIGINS[0],
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
   "Access-Control-Max-Age": "86400", // 24 hours
-};
+});
 
-export async function OPTIONS() {
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get("origin");
   return new NextResponse(null, {
     status: 204,
-    headers: corsHeaders,
+    headers: corsHeaders(origin),
   });
 }
 
 export async function GET(request: NextRequest) {
   const requestId = createRequestId();
+  const origin = request.headers.get("origin");
   logger.info(
     "Received GET request",
     { path: request.nextUrl.pathname },
@@ -74,7 +80,7 @@ export async function GET(request: NextRequest) {
         requestId,
         timestamp: new Date().toISOString(),
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders(origin) }
     );
   } catch (error) {
     logger.error(
@@ -89,6 +95,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(req: NextRequest): Promise<Response> {
   const requestId = createRequestId();
+  const origin = req.headers.get("origin");
   logger.info(
     "Received POST request",
     { path: req.nextUrl.pathname },
@@ -178,7 +185,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             requestId,
             timestamp: new Date().toISOString(),
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders(origin) }
         );
       }
 
@@ -205,7 +212,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             requestId,
             timestamp: new Date().toISOString(),
           },
-          { headers: corsHeaders }
+          { headers: corsHeaders(origin) }
         );
       }
 
@@ -304,7 +311,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         requestId,
         timestamp: new Date().toISOString(),
       },
-      { headers: corsHeaders }
+      { headers: corsHeaders(origin) }
     );
   } catch (error) {
     logger.error(

@@ -38,7 +38,8 @@ export function handleError(
   });
 
   const corsHeaders = {
-    "Access-Control-Allow-Origin": "https://shamelesscollective.com",
+    "Access-Control-Allow-Origin":
+      "https://shamelesscollective.com,https://shameless-test.myshopify.com",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept",
   };
