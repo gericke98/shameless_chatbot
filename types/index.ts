@@ -220,3 +220,18 @@ export type OrderItem = {
   price: string;
   total: string;
 };
+
+export type ProductVariant = {
+  inventory_quantity: number;
+  title: string;
+  id: string;
+  [key: string]: number | string;
+};
+
+export type ShopifyProduct = {
+  title: string;
+  variants?: ProductVariant[];
+  handle?: string;
+  id?: string;
+  [key: string]: unknown;
+};

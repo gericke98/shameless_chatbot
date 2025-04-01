@@ -1,8 +1,12 @@
 import { MessageParameters } from "@/app/types/api";
-import { aiService } from "../ai";
-import { SizeChart } from "@/types";
 import { extractProduct, insertCustomer } from "@/app/queries/order";
 import { logger } from "../utils/logger";
+import {
+  ProductVariant,
+  ShopifyProduct,
+  SizeChart,
+  MeasurementType,
+} from "@/types";
 
 // Example size chart for different product types
 const sizeCharts: Record<string, SizeChart> = {
@@ -163,19 +167,6 @@ interface ChatMessage {
   content: string;
 }
 
-interface ProductVariant {
-  inventory_quantity: number;
-  [key: string]: number | string;
-}
-
-interface ShopifyProduct {
-  title: string;
-  variants?: ProductVariant[];
-  success?: boolean;
-  product?: ShopifyProduct;
-  [key: string]: unknown;
-}
-
 export async function handleProductInquiry(
   parameters: Partial<MessageParameters>,
   message: string,
@@ -198,94 +189,117 @@ export async function handleProductInquiry(
       : "Which product would you like to know the size for?";
   }
 
-  const shopifyData = await extractProduct(product_name);
-  logger.debug("Product data retrieved", { success: shopifyData?.success });
+  try {
+    const shopifyData = await extractProduct(product_name);
+    logger.debug("Product data retrieved", { success: shopifyData?.success });
 
-  // For size queries, we need both product data and size-related parameters
-  if (shopifyData?.success && shopifyData?.product) {
-    let product_type = "CREWNECK"; // default type
-
-    // Type guard to ensure we have a valid product with title
-    const product = shopifyData.product;
-    if (
-      typeof product === "object" &&
-      product !== null &&
-      "title" in product &&
-      typeof product.title === "string"
-    ) {
-      const upperTitle = product.title.toUpperCase();
-      if (upperTitle.includes("HOODIE")) {
-        product_type = "HOODIE";
-      } else if (upperTitle.includes("SWEATSHIRT")) {
-        product_type = "SWEATSHIRT";
-      } else if (upperTitle.includes("POLO")) {
-        product_type = "POLO";
-      }
-      logger.debug("Product type determined", {
-        product_type,
-        title: product.title,
-      });
-    }
-
-    // If asking about sizing, we need height and fit preference
-    const productTitle =
-      shopifyData?.product && "title" in shopifyData.product
-        ? shopifyData.product.title
-        : "";
-    if (!height || !fit) {
-      logger.debug("Missing size parameters", { height, fit });
-      const promptMessage =
-        language === "Spanish"
-          ? `Para recomendarte la mejor talla para el ${productTitle}, necesito saber:\n${!height ? "- Tu altura (en cm)\n" : ""}${!fit ? "- Tu preferencia de ajuste (ajustado, regular, holgado)" : ""}`
-          : `To recommend the best size for the ${productTitle}, I need to know:\n${!height ? "- Your height (in cm)\n" : ""}${!fit ? "- Your preferred fit (tight, regular, loose)" : ""}`;
-      return promptMessage;
-    }
-
-    // Get the size chart for this product type
-    const sizeChart = sizeCharts[product_type];
-    if (!sizeChart) {
-      logger.warn("No size chart found for product type", { product_type });
+    if (!shopifyData) {
+      logger.error(
+        "Failed to fetch product data",
+        new Error("No data returned"),
+        { product_name }
+      );
       return language === "Spanish"
-        ? "Lo siento, no tengo información de tallas para este producto específico."
-        : "Sorry, I don't have size information for this specific product.";
+        ? "Lo siento, ha ocurrido un error al buscar el producto. Por favor, intenta de nuevo más tarde."
+        : "Sorry, there was an error searching for the product. Please try again later.";
     }
 
-    const validatedParams: MessageParameters = {
-      order_number: "",
-      email: "",
-      product_handle: "",
-      new_delivery_info: "",
-      delivery_status: "",
-      tracking_number: "",
-      delivery_address_confirmed: false,
-      return_type: "",
-      return_reason: "",
-      returns_website_sent: false,
-      product_type: "",
-      product_name: (productTitle || product_name || "") as string,
-      product_size: "",
-      fit: "",
-      size_query: "",
-      update_type: "",
-      height: "",
-      weight: "",
-      usual_size: "",
-      ...parameters,
-    };
+    // For size queries, we need both product data and size-related parameters
+    if (shopifyData.success && shopifyData.product) {
+      let product_type = "CREWNECK"; // default type
 
-    logger.info("Generating size recommendation", {
-      product_type,
+      // Type guard to ensure we have a valid product with title
+      const product = shopifyData.product;
+      if (
+        typeof product === "object" &&
+        product !== null &&
+        "title" in product &&
+        typeof product.title === "string"
+      ) {
+        const upperTitle = product.title.toUpperCase();
+        if (upperTitle.includes("HOODIE")) {
+          product_type = "HOODIE";
+        } else if (upperTitle.includes("SWEATSHIRT")) {
+          product_type = "SWEATSHIRT";
+        } else if (upperTitle.includes("POLO")) {
+          product_type = "POLO";
+        }
+        logger.debug("Product type determined", {
+          product_type,
+          title: product.title,
+        });
+      }
+
+      // If asking about sizing, we need height and fit preference
+      const productTitle =
+        shopifyData?.product && "title" in shopifyData.product
+          ? shopifyData.product.title
+          : "";
+
+      if (!height || !fit) {
+        logger.debug("Missing size parameters", { height, fit });
+        return language === "Spanish"
+          ? `Para ayudarte a encontrar la talla perfecta del ${productTitle}, necesito saber tu altura y si prefieres un ajuste más ajustado o más holgado. ¿Podrías proporcionarme esta información?`
+          : `To help you find the perfect size for the ${productTitle}, I need to know your height and if you prefer a tighter or looser fit. Could you provide this information?`;
+      }
+
+      // Get size chart for the product type
+      const sizeChart = sizeCharts[product_type];
+      if (!sizeChart) {
+        logger.warn("No size chart found for product type", { product_type });
+        return language === "Spanish"
+          ? "Lo siento, no tengo una tabla de tallas para este tipo de producto."
+          : "Sorry, I don't have a size chart for this type of product.";
+      }
+
+      // Calculate recommended size based on height and fit preference
+      const heightNum = parseInt(height);
+      if (isNaN(heightNum)) {
+        logger.warn("Invalid height value provided", { height });
+        return language === "Spanish"
+          ? "Lo siento, no pude entender la altura proporcionada. ¿Podrías especificarla en centímetros?"
+          : "Sorry, I couldn't understand the height provided. Could you specify it in centimeters?";
+      }
+
+      let recommendedSize: string;
+      if (heightNum < 170) {
+        recommendedSize = fit === "tight" ? "XS" : "S";
+      } else if (heightNum < 180) {
+        recommendedSize = fit === "tight" ? "S" : "M";
+      } else if (heightNum < 190) {
+        recommendedSize = fit === "tight" ? "M" : "L";
+      } else {
+        recommendedSize = fit === "tight" ? "L" : "XL";
+      }
+
+      // Get measurements for the recommended size
+      const measurements = sizeChart.measurements
+        .map(
+          (m: MeasurementType) =>
+            `${m.name}: ${m.values[recommendedSize as keyof typeof m.values]}${m.unit}`
+        )
+        .join(", ");
+
+      logger.info("Size recommendation generated", {
+        product_name,
+        height: heightNum,
+        fit,
+        recommended_size: recommendedSize,
+      });
+
+      return language === "Spanish"
+        ? `Basado en tu altura de ${heightNum}cm y preferencia de ajuste ${fit}, te recomiendo la talla ${recommendedSize}. Las medidas son: ${measurements}. ¿Te gustaría que te ayude a comprarlo?`
+        : `Based on your height of ${heightNum}cm and ${fit} fit preference, I recommend size ${recommendedSize}. The measurements are: ${measurements}. Would you like help purchasing it?`;
+    }
+  } catch (error) {
+    logger.error("Error handling product inquiry", error as Error, {
+      product_name,
       height,
       fit,
     });
-    return await aiService.generateFinalAnswer(
-      "product_sizing",
-      validatedParams,
-      null,
-      message,
-      context,
-      language
-    );
+    return language === "Spanish"
+      ? "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde."
+      : "Sorry, there was an error. Please try again later.";
   }
 
   logger.warn("Product not found or invalid data", { product_name });
@@ -312,12 +326,30 @@ export async function handleProductInquiryRestock(
       : "Which product would you like to know the availability of?";
   }
 
-  const shopifyData = await extractProduct(product_name);
-  logger.debug("Product data retrieved for restock", {
-    success: shopifyData?.success,
-  });
+  try {
+    const shopifyData = await extractProduct(product_name);
+    logger.debug("Product data retrieved for restock", {
+      success: shopifyData?.success,
+    });
 
-  if (shopifyData?.success && shopifyData?.product) {
+    if (!shopifyData) {
+      logger.error(
+        "Failed to fetch product data",
+        new Error("No data returned"),
+        { product_name }
+      );
+      return language === "Spanish"
+        ? "Lo siento, ha ocurrido un error al buscar el producto. Por favor, intenta de nuevo más tarde."
+        : "Sorry, there was an error searching for the product. Please try again later.";
+    }
+
+    if (!shopifyData.success || !shopifyData.product) {
+      logger.warn("Product not found or invalid data", { product_name });
+      return language === "Spanish"
+        ? "Lo siento, no he podido encontrar información sobre ese producto."
+        : "Sorry, I couldn't find information about that product.";
+    }
+
     const product = shopifyData.product;
     if (
       typeof product === "object" &&
@@ -348,20 +380,31 @@ export async function handleProductInquiryRestock(
             : `The ${productTitle} is currently out of stock. If you share your email with me, I'll notify you when it's back in stock 😊`;
         }
 
-        // Create customer
-        const response = await insertCustomer(email);
-        if (response.success) {
-          logger.info(
-            "Successfully added customer to restock notification list",
-            { email, product_name }
-          );
-          return language === "Spanish"
-            ? `¡Perfecto! Te avisaré cuando el ${productTitle} vuelva a estar disponible 😊`
-            : `Perfect! I'll notify you when the ${productTitle} is back in stock 😊`;
-        } else {
+        try {
+          // Create customer
+          const response = await insertCustomer(email);
+          if (response.success) {
+            logger.info(
+              "Successfully added customer to restock notification list",
+              { email, product_name }
+            );
+            return language === "Spanish"
+              ? `¡Perfecto! Te avisaré cuando el ${productTitle} vuelva a estar disponible 😊`
+              : `Perfect! I'll notify you when the ${productTitle} is back in stock 😊`;
+          } else {
+            logger.error(
+              "Failed to add customer to restock notification list",
+              new Error(response.error),
+              { email, product_name }
+            );
+            return language === "Spanish"
+              ? "Lo siento, ha ocurrido un error. ¿Podrías intentarlo de nuevo?"
+              : "I'm sorry, there was an error. Could you please try again?";
+          }
+        } catch (error) {
           logger.error(
-            "Failed to add customer to restock notification list",
-            new Error(response.error),
+            "Error creating customer for restock notification",
+            error as Error,
             { email, product_name }
           );
           return language === "Spanish"
@@ -370,6 +413,13 @@ export async function handleProductInquiryRestock(
         }
       }
     }
+  } catch (error) {
+    logger.error("Error handling product restock inquiry", error as Error, {
+      product_name,
+    });
+    return language === "Spanish"
+      ? "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde."
+      : "Sorry, there was an error. Please try again later.";
   }
 
   logger.warn("Product not found or invalid data for restock", {

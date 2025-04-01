@@ -15,12 +15,23 @@ import { jsPDF } from "jspdf";
 import { logger } from "../utils/logger";
 
 export async function handleReturnsExchange(language: string): Promise<string> {
-  logger.info("Handling returns/exchange request", { language });
-  return getLanguageSpecificResponse(
-    "¡Claro! Puedes hacer el cambio o devolución en el siguiente link: https://shameless-returns-web.vercel.app. Recuerda que el número de pedido es algo como #35500 y lo puedes encontrar en el correo de confirmación de pedido.",
-    "Sure thing! You can make the change or return in the following link: https://shameless-returns-web.vercel.app. Remember that the order number is of the form #35500 and you can find it in the order confirmation email.",
-    language
-  );
+  try {
+    logger.info("Handling returns/exchange request", { language });
+    return getLanguageSpecificResponse(
+      "¡Claro! Puedes hacer el cambio o devolución en el siguiente link: https://shameless-returns-web.vercel.app. Recuerda que el número de pedido es algo como #35500 y lo puedes encontrar en el correo de confirmación de pedido.",
+      "Sure thing! You can make the change or return in the following link: https://shameless-returns-web.vercel.app. Remember that the order number is of the form #35500 and you can find it in the order confirmation email.",
+      language
+    );
+  } catch (error) {
+    logger.error("Error handling returns/exchange request", error as Error, {
+      language,
+    });
+    return getLanguageSpecificResponse(
+      "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde.",
+      "Sorry, there was an error. Please try again later.",
+      language
+    );
+  }
 }
 
 export async function handlePromoCode(
@@ -30,67 +41,77 @@ export async function handlePromoCode(
   const { email } = parameters;
   logger.info("Handling promo code request", { email, language });
 
-  if (!email || typeof email !== "string") {
-    logger.debug("No email provided for promo code request");
+  try {
+    if (!email || typeof email !== "string") {
+      logger.debug("No email provided for promo code request");
+      return language === "Spanish"
+        ? "Vamos a hacer una cosa, si me dejas tu email te crearé un descuento del 20% que podrás usar durante los próximos 15 minutos😊"
+        : "Perfect! If you share your email with me, I'll notify you when the product is back in stock 😊";
+    }
+
+    // Create customer
+    const response = await insertCustomer(email);
+    if (response.error === "Email has already been taken") {
+      logger.info("Customer already exists, creating promo code", { email });
+      const promoCode = await createPromoCode();
+      if (promoCode.success) {
+        logger.info("Successfully created promo code for existing customer", {
+          email,
+          code: promoCode.code,
+        });
+        return language === "Spanish"
+          ? `Aquí tienes tu descuento del 20%: ${promoCode.code}. Hemos visto que ya eres cliente nuestro, así que te lo regalamos. No se lo digas a nadie! Caduca en 15 minutos por lo que aprovéchalo!`
+          : `Here's your 20% discount code: ${promoCode.code}. We've seen that you're already a customer, so we're giving it to you for free. Don't tell anyone! It expires in 15 minutes so take advantage of it!`;
+      } else {
+        logger.error(
+          "Failed to create promo code for existing customer",
+          new Error(promoCode.error),
+          { email }
+        );
+        return language === "Spanish"
+          ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
+          : "I'm sorry, there was an error creating the discount. Could you please try again?";
+      }
+    }
+
+    if (response.success) {
+      logger.info("Successfully created new customer", { email });
+      const promoCode = await createPromoCode();
+      if (promoCode.success) {
+        logger.info("Successfully created promo code for new customer", {
+          email,
+          code: promoCode.code,
+        });
+        return language === "Spanish"
+          ? `Aquí tienes tu descuento del 20%: ${promoCode.code}. No se lo digas a nadie! Caduca en 15 minutos por lo que aprovéchalo!`
+          : `Here's your 20% discount code: ${promoCode.code}. Don't tell anyone! It expires in 15 minutes so take advantage of it!`;
+      } else {
+        logger.error(
+          "Failed to create promo code for new customer",
+          new Error(promoCode.error),
+          { email }
+        );
+        return language === "Spanish"
+          ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
+          : "I'm sorry, there was an error creating the discount. Could you please try again?";
+      }
+    }
+
+    logger.error("Failed to create customer", new Error(response.error), {
+      email,
+    });
     return language === "Spanish"
-      ? "Vamos a hacer una cosa, si me dejas tu email te crearé un descuento del 20% que podrás usar durante los próximos 15 minutos😊"
-      : "Perfect! If you share your email with me, I'll notify you when the product is back in stock 😊";
+      ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
+      : "I'm sorry, there was an error creating the discount. Could you please try again?";
+  } catch (error) {
+    logger.error("Error handling promo code request", error as Error, {
+      email,
+      language,
+    });
+    return language === "Spanish"
+      ? "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde."
+      : "Sorry, there was an error. Please try again later.";
   }
-
-  // Create customer
-  const response = await insertCustomer(email);
-  if (response.error == "Email has already been taken") {
-    logger.info("Customer already exists, creating promo code", { email });
-    const promoCode = await createPromoCode();
-    if (promoCode.success) {
-      logger.info("Successfully created promo code for existing customer", {
-        email,
-        code: promoCode.code,
-      });
-      return language === "Spanish"
-        ? `Aquí tienes tu descuento del 20%: ${promoCode.code}. Hemos visto que ya eres cliente nuestro, así que te lo regalamos. No se lo digas a nadie! Caduca en 15 minutos por lo que aprovéchalo!`
-        : `Here's your 20% discount code: ${promoCode.code}. We've seen that you're already a customer, so we're giving it to you for free. Don't tell anyone! It expires in 15 minutes so take advantage of it!`;
-    } else {
-      logger.error(
-        "Failed to create promo code for existing customer",
-        new Error(promoCode.error),
-        { email }
-      );
-      return language === "Spanish"
-        ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
-        : "I'm sorry, there was an error creating the discount. Could you please try again?";
-    }
-  }
-
-  if (response.success) {
-    logger.info("Successfully created new customer", { email });
-    const promoCode = await createPromoCode();
-    if (promoCode.success) {
-      logger.info("Successfully created promo code for new customer", {
-        email,
-        code: promoCode.code,
-      });
-      return language === "Spanish"
-        ? `Aquí tienes tu descuento del 20%: ${promoCode.code}. No se lo digas a nadie! Caduca en 15 minutos por lo que aprovéchalo!`
-        : `Here's your 20% discount code: ${promoCode.code}. Don't tell anyone! It expires in 15 minutes so take advantage of it!`;
-    } else {
-      logger.error(
-        "Failed to create promo code for new customer",
-        new Error(promoCode.error),
-        { email }
-      );
-      return language === "Spanish"
-        ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
-        : "I'm sorry, there was an error creating the discount. Could you please try again?";
-    }
-  }
-
-  logger.error("Failed to create customer", new Error(response.error), {
-    email,
-  });
-  return language === "Spanish"
-    ? "Lo siento, ha ocurrido un error al crear el descuento. ¿Podrías intentarlo de nuevo?"
-    : "I'm sorry, there was an error creating the discount. Could you please try again?";
 }
 
 export async function handleInvoiceRequest(
@@ -100,21 +121,35 @@ export async function handleInvoiceRequest(
   const { order_number, email } = parameters;
   logger.info("Handling invoice request", { order_number, email, language });
 
-  if (!order_number || !email) {
-    logger.warn("Missing order number or email for invoice request");
-    return await NoOrderNumberOrEmail(language);
-  }
+  try {
+    if (!order_number || !email) {
+      logger.warn("Missing order number or email for invoice request");
+      return await NoOrderNumberOrEmail(language);
+    }
 
-  const shopifyData = await extractCompleteOrder(order_number, email);
-  if (!shopifyData.success) {
-    logger.error("Failed to extract order data", new Error(shopifyData.error), {
-      order_number,
-      email,
-    });
-    return await InvalidCredentials(language, shopifyData.error);
-  }
+    const shopifyData = await extractCompleteOrder(order_number, email);
+    if (!shopifyData.success) {
+      logger.error(
+        "Failed to extract order data",
+        new Error(shopifyData.error),
+        {
+          order_number,
+          email,
+        }
+      );
+      return await InvalidCredentials(language, shopifyData.error);
+    }
 
-  if (shopifyData.order) {
+    if (!shopifyData.order) {
+      logger.warn("Order not found for invoice request", {
+        order_number,
+        email,
+      });
+      return language === "Spanish"
+        ? "Lo siento, no he podido encontrar información sobre tu pedido."
+        : "Sorry, I couldn't find information about your order.";
+    }
+
     const { billing_address, line_items, total_price, created_at } =
       shopifyData.order;
 
@@ -161,116 +196,127 @@ export async function handleInvoiceRequest(
         ? "Lo siento, ha habido un error generando la factura. Por favor, inténtalo de nuevo más tarde."
         : "Sorry, there was an error generating the invoice. Please try again later.";
     }
+  } catch (error) {
+    logger.error("Error handling invoice request", error as Error, {
+      order_number,
+      email,
+      language,
+    });
+    return language === "Spanish"
+      ? "Lo siento, ha ocurrido un error. Por favor, intenta de nuevo más tarde."
+      : "Sorry, there was an error. Please try again later.";
   }
-
-  logger.warn("Order not found", { order_number, email });
-  return language === "Spanish"
-    ? "Lo siento, no he podido encontrar los datos del pedido."
-    : "Sorry, I couldn't find the order data.";
 }
 
 const generateInvoice = async (data: InvoiceData): Promise<Buffer> => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+  try {
+    const doc = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+    });
 
-  // Set initial position and margins
-  let y = 20;
-  let y1 = y;
-  const leftMargin = 20;
-  const centerMargin = 105;
-  const rightMargin = 190;
-  const lineHeight = 6;
+    // Set initial position and margins
+    let y = 20;
+    let y1 = y;
+    const leftMargin = 20;
+    const centerMargin = 105;
+    const rightMargin = 190;
+    const lineHeight = 6;
 
-  // Title
-  doc.setFontSize(16);
-  doc.text("FACTURA", rightMargin, y, { align: "right" });
-  y += lineHeight * 2;
-  doc.text(data.invoiceNumber, rightMargin, y, { align: "right" });
-  y += lineHeight;
-  doc.text(data.date, rightMargin, y, { align: "right" });
-
-  y += lineHeight * 3;
-  y1 = y;
-  // Client data
-  doc.setFontSize(12);
-  doc.text("Datos del cliente", leftMargin, y);
-  y += lineHeight * 2;
-  doc.setFontSize(10);
-  doc.text(data.name, leftMargin, y);
-  y += lineHeight;
-  doc.text(data.direccion, leftMargin, y);
-  y += lineHeight;
-  doc.text(data.auxiliarAddress, leftMargin, y);
-  if (data.phone) {
+    // Title
+    doc.setFontSize(16);
+    doc.text("FACTURA", rightMargin, y, { align: "right" });
+    y += lineHeight * 2;
+    doc.text(data.invoiceNumber, rightMargin, y, { align: "right" });
     y += lineHeight;
-    doc.text(data.phone, leftMargin, y);
-  }
+    doc.text(data.date, rightMargin, y, { align: "right" });
 
-  // Company data
-  doc.setFontSize(12);
-  doc.text("Datos", rightMargin, y1, { align: "right" });
-  y1 += lineHeight * 2;
-  doc.setFontSize(10);
-  doc.text("CORISA TEXTIL S.L.", rightMargin, y1, { align: "right" });
-  y1 += lineHeight;
-  doc.text("B02852895", rightMargin, y1, { align: "right" });
-  y1 += lineHeight;
-  doc.text("Calle Neptuno 29", rightMargin, y1, { align: "right" });
-  y1 += lineHeight;
-  doc.text("Pozuelo de Alarcón, Madrid, 28224", rightMargin, y1, {
-    align: "right",
-  });
-  y1 += lineHeight;
-  doc.text("(+34) 608667749", rightMargin, y1, { align: "right" });
-
-  // Table headers
-  y = y1 + 50;
-  doc.setFontSize(12);
-  doc.text("ARTÍCULOS", leftMargin, y);
-  doc.text("CANTIDAD", centerMargin - 20, y);
-  doc.text("PRECIO", centerMargin + 20, y);
-  doc.text("TOTAL", rightMargin, y, { align: "right" });
-
-  // Draw table lines
-  doc.setLineWidth(0.5);
-  doc.line(leftMargin, y - 5, rightMargin, y - 5);
-  doc.line(leftMargin, y + 5, rightMargin, y + 5);
-
-  // Order items
-  y += lineHeight * 2;
-  let subtotal = 0;
-  data.pedidoList.forEach((item) => {
+    y += lineHeight * 3;
+    y1 = y;
+    // Client data
+    doc.setFontSize(12);
+    doc.text("Datos del cliente", leftMargin, y);
+    y += lineHeight * 2;
     doc.setFontSize(10);
-    doc.text(item.name, leftMargin, y);
-    doc.text(item.quantity, centerMargin - 20, y);
-    doc.text(item.price, centerMargin + 20, y);
-    doc.text(item.total, rightMargin, y, { align: "right" });
+    doc.text(data.name, leftMargin, y);
+    y += lineHeight;
+    doc.text(data.direccion, leftMargin, y);
+    y += lineHeight;
+    doc.text(data.auxiliarAddress, leftMargin, y);
+    if (data.phone) {
+      y += lineHeight;
+      doc.text(data.phone, leftMargin, y);
+    }
 
-    subtotal += parseFloat(item.total.slice(0, -2));
-    y += lineHeight * 1.5;
-  });
+    // Company data
+    doc.setFontSize(12);
+    doc.text("Datos", rightMargin, y1, { align: "right" });
+    y1 += lineHeight * 2;
+    doc.setFontSize(10);
+    doc.text("CORISA TEXTIL S.L.", rightMargin, y1, { align: "right" });
+    y1 += lineHeight;
+    doc.text("B02852895", rightMargin, y1, { align: "right" });
+    y1 += lineHeight;
+    doc.text("Calle Neptuno 29", rightMargin, y1, { align: "right" });
+    y1 += lineHeight;
+    doc.text("Pozuelo de Alarcón, Madrid, 28224", rightMargin, y1, {
+      align: "right",
+    });
+    y1 += lineHeight;
+    doc.text("(+34) 608667749", rightMargin, y1, { align: "right" });
 
-  // Totals calculation
-  const subtotalBase = data.subtotalInput / 1.21;
-  subtotal = Math.round(subtotalBase * 100) / 100;
-  const iva = data.ivaBool ? Math.round(0.21 * subtotal * 100) / 100 : 0;
-  const total = subtotal + iva;
+    // Table headers
+    y = y1 + 50;
+    doc.setFontSize(12);
+    doc.text("ARTÍCULOS", leftMargin, y);
+    doc.text("CANTIDAD", centerMargin - 20, y);
+    doc.text("PRECIO", centerMargin + 20, y);
+    doc.text("TOTAL", rightMargin, y, { align: "right" });
 
-  // Footer totals
-  y += lineHeight;
-  doc.setFontSize(12);
-  doc.text("Subtotal", centerMargin + 20, y);
-  doc.text(`${subtotal} €`, rightMargin, y, { align: "right" });
-  y += lineHeight * 2;
-  doc.text("IVA", centerMargin + 20, y);
-  doc.text(`${iva} €`, rightMargin, y, { align: "right" });
-  y += lineHeight * 2;
-  doc.text("TOTAL", centerMargin + 20, y);
-  doc.text(`${total} €`, rightMargin, y, { align: "right" });
+    // Draw table lines
+    doc.setLineWidth(0.5);
+    doc.line(leftMargin, y - 5, rightMargin, y - 5);
+    doc.line(leftMargin, y + 5, rightMargin, y + 5);
 
-  // Get the PDF as a buffer
-  return Buffer.from(doc.output("arraybuffer"));
+    // Order items
+    y += lineHeight * 2;
+    let subtotal = 0;
+    data.pedidoList.forEach((item) => {
+      doc.setFontSize(10);
+      doc.text(item.name, leftMargin, y);
+      doc.text(item.quantity, centerMargin - 20, y);
+      doc.text(item.price, centerMargin + 20, y);
+      doc.text(item.total, rightMargin, y, { align: "right" });
+
+      subtotal += parseFloat(item.total.slice(0, -2));
+      y += lineHeight * 1.5;
+    });
+
+    // Totals calculation
+    const subtotalBase = data.subtotalInput / 1.21;
+    subtotal = Math.round(subtotalBase * 100) / 100;
+    const iva = data.ivaBool ? Math.round(0.21 * subtotal * 100) / 100 : 0;
+    const total = subtotal + iva;
+
+    // Footer totals
+    y += lineHeight;
+    doc.setFontSize(12);
+    doc.text("Subtotal", centerMargin + 20, y);
+    doc.text(`${subtotal} €`, rightMargin, y, { align: "right" });
+    y += lineHeight * 2;
+    doc.text("IVA", centerMargin + 20, y);
+    doc.text(`${iva} €`, rightMargin, y, { align: "right" });
+    y += lineHeight * 2;
+    doc.text("TOTAL", centerMargin + 20, y);
+    doc.text(`${total} €`, rightMargin, y, { align: "right" });
+
+    // Get the PDF as a buffer
+    return Buffer.from(doc.output("arraybuffer"));
+  } catch (error) {
+    logger.error("Error generating invoice PDF", error as Error, {
+      invoice_number: data.invoiceNumber,
+    });
+    throw error;
+  }
 };
