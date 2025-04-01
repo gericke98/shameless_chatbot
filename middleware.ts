@@ -1,36 +1,24 @@
-import { withAuth } from "next-auth/middleware";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
-export default withAuth(
-  function middleware() {
-    // Add security headers
-    const response = NextResponse.next();
+export async function middleware(request: NextRequest) {
+  const token = await getToken({ req: request });
+  const isAdminRoute = request.nextUrl.pathname.startsWith("/admin");
+  const isLoginPage = request.nextUrl.pathname === "/admin/login";
 
-    // Prevent clickjacking
-    response.headers.set("X-Frame-Options", "DENY");
-    // Enable XSS protection
-    response.headers.set("X-XSS-Protection", "1; mode=block");
-    // Prevent MIME type sniffing
-    response.headers.set("X-Content-Type-Options", "nosniff");
-    // Referrer policy
-    response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-    // Content security policy
-    response.headers.set(
-      "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
-    );
-
-    return response;
-  },
-  {
-    pages: {
-      signIn: "/admin/login",
-    },
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
+  // If trying to access admin routes without authentication
+  if (isAdminRoute && !isLoginPage && !token) {
+    return NextResponse.redirect(new URL("/admin/login", request.url));
   }
-);
+
+  // If trying to access login page while already authenticated
+  if (isLoginPage && token) {
+    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: ["/admin/:path*"],

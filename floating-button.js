@@ -1247,6 +1247,7 @@
       if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
         let originalHeight;
         let originalScrollPos;
+        let keyboardHeight = 0;
 
         inputTextarea.addEventListener("focus", () => {
           originalHeight = window.visualViewport.height;
@@ -1254,9 +1255,11 @@
 
           // Add a small delay to account for keyboard animation
           setTimeout(() => {
-            const keyboardHeight =
-              originalHeight - window.visualViewport.height;
-            chatWindow.style.height = `${window.visualViewport.height}px`;
+            keyboardHeight = originalHeight - window.visualViewport.height;
+            // Only adjust height if keyboard is actually open
+            if (keyboardHeight > 0) {
+              chatWindow.style.height = `${window.visualViewport.height}px`;
+            }
 
             // Ensure the input is visible
             const inputRect = inputTextarea.getBoundingClientRect();
@@ -1273,8 +1276,13 @@
         });
 
         inputTextarea.addEventListener("blur", () => {
+          // Reset height when keyboard is closed
           chatWindow.style.height = "100%";
-          window.scrollTo(0, originalScrollPos);
+
+          // Only reset scroll position if chat is being closed
+          if (!isOpen) {
+            window.scrollTo(0, originalScrollPos);
+          }
         });
 
         // Only apply overflow restrictions when chat is open
@@ -1282,6 +1290,7 @@
           if (!isOpen) {
             document.body.style.overflow = "hidden";
             messagesContainer.style.overscrollBehavior = "none";
+            chatWindow.style.height = "100%";
           } else {
             document.body.style.overflow = "";
             messagesContainer.style.overscrollBehavior = "";
@@ -1294,7 +1303,26 @@
           .addEventListener("click", () => {
             document.body.style.overflow = "";
             messagesContainer.style.overscrollBehavior = "";
+            chatWindow.style.height = "100%";
           });
+
+        // Update scroll behavior after sending message
+        submitButton.addEventListener("click", () => {
+          if (keyboardHeight > 0) {
+            setTimeout(() => {
+              const inputRect = inputTextarea.getBoundingClientRect();
+              const scrollAmount =
+                inputRect.top -
+                window.visualViewport.height +
+                inputRect.height +
+                keyboardHeight;
+
+              if (scrollAmount > 0) {
+                messagesContainer.scrollTop += scrollAmount;
+              }
+            }, 100);
+          }
+        });
       }
     }
 
