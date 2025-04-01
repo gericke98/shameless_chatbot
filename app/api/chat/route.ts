@@ -11,7 +11,7 @@ import {
   handlePromoCode,
   handleUpdateOrder,
   handleOrderTracking,
-} from "../intent";
+} from "../intents";
 import { ClassifiedMessage } from "@/types";
 import { ChatMessage } from "@/types";
 import { MessageParameters } from "@/app/types/api";
